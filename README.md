@@ -1,30 +1,30 @@
 # Infra
 
-AWS infrastructure planning and Terraform IaC workspace for the illowa-jeolla project.
+illowa-jeolla 프로젝트의 AWS 인프라 설계 문서와 Terraform IaC를 관리하는 저장소입니다.
 
-## Purpose
+## 목적
 
-This repository manages the AWS infrastructure separately from the FE and BE application repositories.
+이 저장소는 FE/BE 애플리케이션 코드와 AWS 인프라 코드를 분리해서 관리하기 위한 공간입니다.
 
-Target deployment structure:
+최종 배포 구조는 아래 방향을 기준으로 합니다.
 
 ```text
-FE: React/Vite static build -> S3 + CloudFront
+FE: React/Vite 정적 빌드 -> S3 + CloudFront
 BE: Spring Boot Docker image -> ECR -> ECS Fargate
 DB: PostgreSQL -> RDS
 Cache/Token State: Redis -> ElastiCache
 Ingress: ALB
-Secrets: Secrets Manager or SSM Parameter Store
+Secret: Secrets Manager 또는 SSM Parameter Store
 Logs: CloudWatch
 IaC: Terraform HCL
 ```
 
-## Documents
+## 문서
 
-- `docs/AWS_DEPLOYMENT_STRATEGY.md`: final AWS deployment strategy
-- `docs/aws-kiro.md`: Kiro steering/hook strategy for Terraform IaC work
+- `docs/AWS_DEPLOYMENT_STRATEGY.md`: 최종 AWS 배포 전략
+- `docs/aws-kiro.md`: Kiro steering/hook을 활용한 Terraform IaC 작성 및 검증 전략
 
-## Planned Structure
+## 예정 구조
 
 ```text
 infra
@@ -50,13 +50,13 @@ infra
     └── hooks
 ```
 
-## Rules
+## 기본 규칙
 
-- Do not commit Terraform state files.
-- Do not commit real `.tfvars` files.
-- Do not store secrets in Terraform code, Markdown docs, or examples.
-- Use `terraform.tfvars.example` only for non-secret sample values.
-- Run `terraform fmt` and `terraform validate` before applying infrastructure changes.
-- Review `terraform plan` before every apply.
+- Terraform state 파일은 커밋하지 않습니다.
+- 실제 값이 들어간 `.tfvars` 파일은 커밋하지 않습니다.
+- Terraform 코드, Markdown 문서, 예시 파일에 secret 값을 저장하지 않습니다.
+- `terraform.tfvars.example`에는 민감하지 않은 샘플 값만 작성합니다.
+- 인프라 변경 전 `terraform fmt`와 `terraform validate`를 실행합니다.
+- `terraform apply` 전에는 항상 `terraform plan` 결과를 검토합니다.
 
-Initial infrastructure apply should be manual, not automatically triggered by merge.
+초기 인프라 반영은 merge 자동 실행이 아니라 수동 실행을 기준으로 합니다.
