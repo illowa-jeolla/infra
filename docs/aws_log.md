@@ -1,0 +1,415 @@
+# AWS / Infra 작업 로그
+
+최종 갱신일: 2026-09-14
+
+## 프로젝트 성격
+
+이 프로젝트는 정식 상용 서비스가 아니라 공모전 제출 및 시연을 위한 배포 대상이다.
+
+다만 단순 정적 배포만 하는 것이 아니라, 인프라 경험과 포트폴리오를 위해 ECS 중심의 AWS 구성을 실제로 만든다. 상용 서비스 수준의 고가용성까지 구현하는 것은 현재 범위가 아니다.
+
+## 담당 범위
+
+- AWS 인프라 설계
+- `infra` 저장소 관리
+- Terraform IaC 작성
+- AWS 리소스 생성 및 검증
+- BE AWS 배포 구조와 Vercel FE 연동 설계
+- GitHub Actions CI/CD 작성 지원
+- 운영 환경변수와 secret 주입 방식 정리
+- 배포 전후 검증 기준 정리
+
+BE/FE 기능 개발과 Vercel 설정은 각 담당자가 진행한다. AWS 배포에 필요한 Dockerfile, 운영 profile, health check, 환경변수 계약은 인프라 측에서 초안을 작성하고 담당자와 합의한다.
+
+## 확정된 방향
+
+### 환경
+
+- Terraform 환경은 하나만 운영한다.
+- 디렉터리 이름은 `environments/main`으로 고정한다.
+- `dev`, `prod`, `demo` 환경은 현재 만들지 않는다.
+- 실제로 환경 분리가 필요해질 때만 추가한다.
+
+### AWS 구성
+
+```text
+FE React/Vite
+-> Vercel
+
+BE Spring Boot API
+-> Docker
+-> ECR
+-> ECS Fargate API Service
+-> ALB
+
+Data
+-> RDS PostgreSQL
+-> ElastiCache Redis
+
+Secrets / Logs
+-> SSM Parameter Store
+-> CloudWatch Logs
+
+CI/CD
+-> FE: Vercel Git integration
+-> BE/infra: GitHub Actions + GitHub OIDC
+```
+
+### 애플리케이션 실행
+
+- 별도 Batch Worker 서버와 SQS/DLQ는 현재 배포 범위에서 제외한다.
+- AI 매칭 비동기 처리와 정기 scheduler는 기존처럼 BE API 프로세스 안에서 실행한다.
+- ECS API desired count를 1로 유지해 scheduler 중복 실행을 방지한다.
+- API task를 2개 이상으로 확장하려면 scheduler를 EventBridge Scheduler로 분리하거나 분산 lock을 먼저 적용한다.
+- 프로세스 내부 `@Async` 작업은 API task 종료 시 복구되지 않을 수 있으며, 제출용 배포에서는 이 위험을 수용한다.
+
+### 비용 및 가용성 기준
+
+- AWS Region: `ap-northeast-2`
+- Availability Zone: 2개
+- NAT Gateway: 1개
+- ECS API desired count: 1
+- RDS: Single-AZ, 소형 인스턴스
+- Redis: single node
+- Vercel 연동 전에 BE API HTTPS domain과 ACM certificate 적용
+- Multi-AZ, NAT 이중화, WAF, Auto Scaling은 초기 범위에서 제외
+
+이 구성은 장애 대응용 상용 운영 구성이 아니다. 단일 NAT, Single-AZ RDS, single-node Redis를 사용하므로 각 리소스 장애 시 서비스 중단 가능성을 감수한다.
+
+## 저장소 구성
+
+```text
+tour_gong/
+├── BE/
+├── FE/
+└── infra/
+```
+
+GitHub 저장소:
+
+```text
+illowa-jeolla/BE
+illowa-jeolla/FE
+illowa-jeolla/infra
+```
+
+## 확정된 infra 구조
+
+```text
+infra/
+├── bootstrap/
+│   └── remote-state/
+├── environments/
+│   └── main/
+│       ├── main.tf
+│       ├── providers.tf
+│       ├── variables.tf
+│       ├── outputs.tf
+│       └── terraform.tfvars.example
+├── modules/
+│   ├── network/
+│   ├── ecr/
+│   ├── alb/
+│   ├── ecs-api/
+│   ├── rds/
+│   ├── redis/
+│   ├── s3-assets/
+│   ├── secrets/
+│   └── github-oidc/
+└── docs/
+    ├── AWS_DEPLOYMENT_STRATEGY.md
+    ├── aws-kiro.md
+    ├── aws_log.md
+    ├── DEPLOYMENT_CONTRACT.md
+    └── RESOURCE_NAMING.md
+```
+
+## 현재 완료 상태
+
+- [x] 단일 환경을 `environments/main`으로 확정
+- [x] 별도 Batch Worker 서버와 SQS/DLQ를 배포 범위에서 제외
+- [x] ECS 실행 모듈을 `ecs-api` 하나로 확정
+- [x] Terraform 디렉터리 구조 생성
+- [x] 빈 모듈 디렉터리에 `.gitkeep` 추가
+- [x] `environments/main` Terraform 뼈대 파일 생성
+- [x] `DEPLOYMENT_CONTRACT.md` 문서 뼈대 생성
+- [x] `RESOURCE_NAMING.md` 문서 뼈대 생성
+- [x] `aws_log.md`를 `infra/docs`로 이동
+- [x] 실제 BE/FE 코드를 기준으로 `DEPLOYMENT_CONTRACT.md` 초안 작성
+- [x] 최신 BE/FE pull 이후 배포 영향 재검토
+- [x] AI 비동기 처리, scheduler, pgvector 요구사항 문서 반영
+- [x] 커뮤니티 이미지 S3 구현과 전체 scheduler 목록 재검토
+- [x] BE 전체 Gradle test 통과
+- [x] BE Docker image build 및 `prod` profile liveness 검증
+
+AWS에는 아직 리소스를 적용하지 않았다. Terraform resource 정의는 remote state bootstrap부터 작성하기 시작했다.
+
+## 최근 변경 이력
+
+### 2026-09-14
+
+아키텍처 및 문서:
+
+- 별도 Batch Worker ECS Service와 SQS/DLQ를 초기 배포 구조에서 제거
+- AI `@Async` 처리와 모든 scheduler를 ECS API task 하나에서 실행하도록 계약 변경
+- scheduler 중복 방지를 위해 ECS API desired count를 1로 고정
+- Terraform 단일 환경 경로를 `environments/main`으로 확정
+- AWS 리소스 공통 prefix를 `illowa-jeolla-main`으로 확정
+- 커뮤니티 이미지용 private S3 책임을 `modules/s3-assets`로 분리
+- 최신 BE commit `82fe2a2`, FE commit `207c805` 기준으로 API 경로, scheduler, 환경변수, S3 및 pgvector 요구사항 재검토
+- ECS runtime을 Linux `X86_64`, ECR 배포 image를 `linux/amd64`로 확정
+- FE hosting을 Vercel로 변경하고 AWS FE bucket, CloudFront, OAC, FE deploy role을 범위에서 제거
+- Terraform state S3와 커뮤니티 이미지 private S3는 유지
+- `modules/s3-cloudfront` 빈 모듈 제거
+- `bootstrap/remote-state`에 state bucket, versioning, SSE-S3, public access block, TLS 강제 policy 작성
+- `environments/main/backend.tf`에 S3 native lockfile을 사용하는 partial backend 설정 추가
+- remote state bootstrap AWS 적용 완료: 6개 생성, 변경 0, 삭제 0
+- versioning, AES256 encryption, public access block, BucketOwnerEnforced, 비공개 policy 상태 검증 완료
+- `environments/main`을 생성된 S3 backend와 `use_lockfile = true`로 초기화
+- 이후 AWS resource apply는 코드와 plan을 사용자에게 먼저 제시하고 명시적 승인 후 실행
+
+BE 배포 준비:
+
+- `BE/Dockerfile` 추가: Java 17 Temurin Jammy multi-stage build와 비루트 `spring` 사용자 적용
+- `BE/.dockerignore` 추가
+- Actuator 의존성 추가
+- Spring Security에서 `/actuator/health`와 하위 경로를 인증 없이 허용
+- `BE/src/main/resources/application-prod.yaml` 추가
+- 운영 profile에 Redis TLS, graceful shutdown, forwarded header, liveness probe 설정 추가
+- `BE/.env.example`에 Redis TLS, AI limit/cron, 외부 공공 API, 커뮤니티 이미지 저장소 환경변수 추가
+- 운영 DB migration 도입 전까지 `JPA_DDL_AUTO=update`, Spring Batch metadata 초기화는 `always`를 기본값으로 유지
+
+검증 및 로컬 실행 환경:
+
+- 전체 Gradle test 성공
+- Apple Silicon에서 로컬 Docker image build 성공
+- `prod` profile로 PostgreSQL 및 Redis 연결 성공
+- `/actuator/health/liveness` 응답 `UP` 확인
+- pull 이전에 생성돼 있던 `postgres:17-alpine` 로컬 컨테이너를 최신 Compose 정의인 `pgvector/pgvector:pg17`로 재생성했으며 기존 volume은 유지
+- pgvector extension `0.8.6`과 `ai_tour_place_candidates`, `ai_job_candidates` 테이블 생성 확인
+- smoke test용 API 컨테이너는 검증 후 삭제
+- BE의 기존 `.gitignore` 로컬 변경은 이 작업에서 수정하거나 커밋하지 않음
+
+## 현재 애플리케이션 상태
+
+### BE
+
+확인된 내용:
+
+- Spring Boot / Gradle
+- Java 17
+- Spring Boot 4.1.0
+- Spring Batch 의존성과 Batch Job 존재
+- 전역 scheduling과 여러 `@Scheduled` 작업 존재
+- AI 후보 동기화 및 비활성 후보 정리 `@Scheduled` 작업 존재
+- 커뮤니티 draft/삭제 게시글/S3 객체 삭제 재시도 scheduler 존재
+- 만료 gathering과 삭제된 여행 가이드 정리 Spring Batch scheduler 존재
+- AI 매칭과 여행 추천 요청은 Spring 내부 event와 `@Async`로 API 프로세스 안에서 처리
+- `hibernate-vector`와 PostgreSQL `vector(1536)` 컬럼 사용
+- 로컬 PostgreSQL은 `pgvector/pgvector:pg17` image 사용
+- PostgreSQL 및 Redis 의존성 사용
+- 로컬 `docker-compose.yml`은 PostgreSQL과 Redis 실행
+- `application.yaml`에서 `.env`를 optional import
+- Redis를 refresh token, OAuth state, 추천 cache/draft 등에 사용
+- AWS SDK S3 client와 presigned GET URL 기반 커뮤니티 이미지 저장 구현 존재
+- `prod`, `production` profile에서 localhost FE origin/callback을 거부하는 검증 존재
+- multi-stage Dockerfile과 `.dockerignore` 존재
+- `application-prod.yaml`과 `prod`, `production` profile용 FE 주소 검증 존재
+- Actuator liveness health endpoint와 Security 허용 규칙 존재
+- `ddl-auto: update` 사용 중
+- 최신 확인 commit: BE `82fe2a2`, FE `207c805`
+
+필요한 작업:
+
+- [x] Dockerfile 작성
+- [x] `.dockerignore` 작성
+- [x] 운영 profile 초안 작성
+- [ ] 운영 DB migration 방식 확정
+- [x] Actuator와 liveness health endpoint 추가
+- [x] Redis TLS/AUTH 연결 설정 추가
+- [ ] 운영 환경변수 목록 확정
+- [ ] RDS에서 `vector` extension 생성 방식 확정
+- [ ] API task가 1개일 때 내부 `@Async`와 scheduler 동작 검증
+- [ ] 커뮤니티 이미지 전용 private S3 bucket과 API task IAM 권한 생성
+- [x] 로컬 Docker image build 및 실행 검증
+
+2026-09-14 로컬 검증 결과:
+
+- 전체 Gradle test 성공
+- `illowa-jeolla-main-api:local` image build 성공
+- image는 비루트 사용자 `spring:spring`으로 실행
+- Temurin Jammy multi-architecture image 사용; 로컬 검증 image는 `arm64`, ECR 배포 image는 ECS `X86_64`에 맞춰 `linux/amd64`로 빌드
+- `prod` profile로 PostgreSQL/Redis 연결 후 `/actuator/health/liveness` 응답 `UP` 확인
+- 기존 로컬 PostgreSQL 컨테이너는 pull 전 `postgres:17-alpine` image였으므로 Compose 최신 정의인 `pgvector/pgvector:pg17`로 재생성
+- pgvector extension `0.8.6`과 AI vector table 생성 확인
+
+`ddl-auto: update`는 제출용 단기 배포에서는 사용할 수 있지만 데이터 변경 위험이 있다. 가능하면 `validate`와 migration 도구를 사용하며, 일정상 불가능하면 위험을 문서화한다.
+
+### FE
+
+확정된 방향:
+
+- React/Vite 앱은 Vercel에서 배포
+- FE 정적 hosting은 AWS Terraform 범위에서 제외
+- 기존 Node/SQLite 서버는 운영 backend로 사용하지 않음
+- Vercel production 환경변수에 BE HTTPS URL 주입
+- Vercel production domain을 BE CORS와 OAuth 완료 redirect에 반영
+- Vite SPA deep link를 위한 `vercel.json` rewrite 필요
+- preview URL은 초기 CORS 허용 대상에서 제외
+
+FE용 S3, CloudFront, OAC, AWS deploy role은 만들지 않는다.
+
+### 비동기 처리와 scheduler
+
+현재 AI 매칭은 API 컨테이너 내부 `@Async` listener에서 처리한다. 별도 Worker와 SQS를 도입하지 않으므로 API가 처리 중 종료되면 작업을 복구할 수 없는 위험을 수용한다.
+
+AI 후보 데이터 동기화 cron도 API 프로세스에서 실행한다. 초기 ECS API desired count는 1로 유지하며, 수평 확장 전에는 scheduler 중복 실행 방지 장치를 별도로 마련해야 한다.
+
+## Terraform 모듈별 책임
+
+### `bootstrap/remote-state`
+
+- Terraform state용 S3 bucket
+- bucket versioning 및 encryption
+- public access block
+- state locking 방식
+
+Terraform 1.10 이상의 S3 native lockfile을 사용한다. deprecated된 DynamoDB locking은 만들지 않는다.
+
+### `modules/network`
+
+- VPC
+- Public Subnet A/B
+- Private App Subnet A/B
+- Private Data Subnet A/B
+- Internet Gateway
+- NAT Gateway 1개
+- Route Table 및 Association
+
+### `modules/ecr`
+
+- API 이미지 저장소
+- image scan on push
+- lifecycle policy
+
+### `modules/alb`
+
+- Application Load Balancer
+- listener
+- target group
+- ALB security group
+
+### `modules/ecs-api`
+
+- API task definition
+- API ECS service
+- task execution role 및 task role
+- CloudWatch log group
+- ALB target group 연결
+
+### `modules/rds`
+
+- PostgreSQL DB instance
+- DB subnet group
+- security group
+- parameter group
+- backup policy
+
+RDS는 public access를 차단하고 ECS security group에서만 5432 접근을 허용한다.
+
+### `modules/redis`
+
+- ElastiCache subnet group
+- Redis node 또는 replication group
+- security group
+- encryption 설정
+
+Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 접근을 허용한다.
+
+### `modules/s3-assets`
+
+- 커뮤니티 이미지 전용 private S3 bucket
+- public access block 및 server-side encryption
+- API task role의 object 읽기/쓰기/삭제 권한
+- 필요 시 CORS 및 lifecycle policy
+
+### `modules/secrets`
+
+- SSM Parameter Store 값 관리 기준
+- ECS task secret 주입 연결
+
+비밀값 자체를 Terraform 코드나 `tfvars`에 평문으로 커밋하지 않는다.
+
+### `modules/github-oidc`
+
+- GitHub OIDC provider
+- BE 배포 role
+- Terraform 실행 role
+
+장기 AWS access key 대신 OIDC를 사용한다.
+
+## 작업 순서
+
+### 1. 구조 및 계약
+
+- [x] infra 디렉터리 구조 생성
+- [x] `DEPLOYMENT_CONTRACT.md` 초안 작성
+- [x] `RESOURCE_NAMING.md` 작성
+
+### 2. 애플리케이션 배포 준비
+
+- [x] BE Dockerfile 및 `.dockerignore`
+- [x] BE 운영 profile 및 health check 초안
+- [x] Vercel FE 연동 방향 확정
+
+### 3. Terraform 기반
+
+- [x] remote state bootstrap 코드 작성
+- [x] remote state bootstrap AWS 적용 및 보안 설정 검증
+- [ ] network module
+- [ ] ECR module
+- [ ] `environments/main` provider/backend/module wiring
+
+### 4. Asset 및 Vercel 연동
+
+- [ ] 커뮤니티 이미지 S3 module
+- [ ] BE HTTPS URL을 Vercel 환경변수에 반영
+- [ ] Vercel production origin을 BE CORS/OAuth 설정에 반영
+- [ ] FE Vercel 통합 검증
+
+### 5. 백엔드 데이터 및 실행 환경
+
+- [ ] RDS module
+- [ ] Redis module
+- [ ] secrets module
+- [ ] ALB module
+- [ ] ECS API module
+
+### 6. 수동 통합 배포
+
+- [ ] ECR image push
+- [ ] ECS API health check
+- [ ] FE에서 BE API 호출
+- [ ] API 내부 비동기 처리 및 scheduler 동작 검증
+
+### 7. CI/CD
+
+- [ ] GitHub OIDC module
+- [ ] BE deploy workflow
+- [ ] Terraform plan/apply 정책
+
+### 8. 최종 검증
+
+- [ ] 로그인 및 OAuth
+- [ ] 주요 API smoke test
+- [ ] RDS 및 Redis 연결
+- [ ] 내부 비동기 처리 및 scheduler 실행 결과
+- [ ] CloudWatch Logs
+- [ ] CORS 및 cookie 설정
+- [ ] 비용 확인
+
+## 현재 다음 작업
+
+다음 작업은 network와 ECR module 코드를 작성하고 `terraform validate`와 `terraform plan` 결과를 사용자에게 검토받는 것이다. 명시적 승인 전에는 해당 리소스를 AWS에 apply하지 않는다.
+
+배포 계약의 `제안` 및 `미정` 항목은 BE/FE 담당자의 확인이 필요하다. ECS API를 2개 이상 실행하면 기존 scheduler가 중복 실행될 수 있으므로 초기 desired count는 1로 유지한다.

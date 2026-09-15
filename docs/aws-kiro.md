@@ -39,7 +39,7 @@ GitHub Actions
 10. main merge
 11. GitHub Actions에서 terraform apply 실행
 12. AWS 리소스 생성
-13. FE/BE main CI/CD가 생성된 AWS 리소스에 앱 배포
+13. BE main CI/CD가 생성된 AWS 리소스에 API 배포
 ```
 
 초기에는 `terraform apply`를 main merge에 바로 자동 연결하지 않고, `workflow_dispatch` 수동 실행으로 둔다. 인프라 변경은 앱 배포보다 영향 범위가 크기 때문이다.
@@ -49,14 +49,11 @@ GitHub Actions
 ```text
 infra
 ├── README.md
+├── bootstrap
+│   └── remote-state
 ├── environments
-│   ├── dev
-│   │   ├── main.tf
-│   │   ├── providers.tf
-│   │   ├── variables.tf
-│   │   ├── outputs.tf
-│   │   └── terraform.tfvars.example
-│   └── prod
+│   └── main
+│       ├── backend.tf
 │       ├── main.tf
 │       ├── providers.tf
 │       ├── variables.tf
@@ -64,14 +61,14 @@ infra
 │       └── terraform.tfvars.example
 ├── modules
 │   ├── network
-│   ├── s3-cloudfront
+│   ├── s3-assets
 │   ├── ecr
 │   ├── alb
-│   ├── ecs
+│   ├── ecs-api
 │   ├── rds
 │   ├── redis
 │   ├── secrets
-│   └── iam-github-oidc
+│   └── github-oidc
 ├── .kiro
 │   ├── steering
 │   └── hooks
@@ -103,7 +100,7 @@ infra
 - `structure.md`: environments와 modules 디렉터리 구조
 - `terraform-standards.md`: naming convention, variable/output 규칙, remote state, module 작성 규칙
 - `aws-security.md`: public RDS/Redis 금지, ALB만 public, least privilege IAM, security group 규칙
-- `deployment-workflow.md`: infra PR plan, main apply, FE/BE 앱 배포와 infra apply 분리
+- `deployment-workflow.md`: infra PR plan, main apply, BE 앱 배포와 infra apply 분리
 
 권장 inclusion:
 
@@ -221,19 +218,19 @@ infra
 
 ### Terraform validate
 
-`terraform validate`는 해당 environment에서 `terraform init`이 선행되어야 한다. 따라서 무조건 전체에 걸기보다 `environments/dev` 또는 `environments/prod` 기준으로 나누는 것이 좋다.
+`terraform validate`는 해당 environment에서 `terraform init`이 선행되어야 한다. 현재 단일 environment인 `environments/main`을 기준으로 실행한다.
 
 ```json
 {
   "version": "v1",
   "hooks": [
     {
-      "name": "Terraform validate dev",
+      "name": "Terraform validate main",
       "trigger": "PostFileSave",
-      "matcher": "^(environments/dev|modules)/.*\\.tf$",
+      "matcher": "^(environments/main|modules)/.*\\.tf$",
       "action": {
         "type": "command",
-        "command": "terraform -chdir=environments/dev validate"
+        "command": "terraform -chdir=environments/main validate"
       }
     }
   ]
@@ -324,10 +321,10 @@ Terraform state는 로컬 파일로 관리하지 않는다.
 
 ```text
 Terraform state -> S3
-Terraform lock  -> DynamoDB
+Terraform lock  -> S3 native lockfile
 ```
 
-S3 backend와 DynamoDB lock table을 최초로 만드는 bootstrap 단계는 별도 HCL 또는 수동 1회 작업으로 분리한다. 이후 나머지 인프라는 remote backend를 사용한다.
+S3 backend bucket을 최초로 만드는 bootstrap 단계는 `bootstrap/remote-state`에서 한 번 실행한다. Terraform 1.10 이상의 `use_lockfile = true`를 사용하며, deprecated된 DynamoDB locking은 새로 만들지 않는다. 이후 `environments/main`은 이 remote backend를 사용한다.
 
 ## Kiro 사용 원칙
 

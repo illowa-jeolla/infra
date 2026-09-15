@@ -10,7 +10,7 @@
 - 작업은 feature 브랜치에서 진행하고, PR을 통해 develop으로 merge한다.
 - develop에서는 FE/BE 통합 개발 테스트를 진행한다.
 - 통합 테스트가 완료되면 main으로 merge한다.
-- FE, BE 각각의 main push를 운영 배포 CI/CD 트리거로 사용한다.
+- FE main은 Vercel 배포, BE main은 AWS ECS 배포 트리거로 사용한다.
 - AWS 인프라는 별도 infra 레포에서 Terraform HCL로 관리한다.
 
 ## 결론
@@ -19,17 +19,18 @@
 
 EKS는 Kubernetes 운영 경험을 얻을 수 있지만, 현재 팀 상황에서는 배포 기반을 만드는 데 필요한 운영 복잡도가 크다. 이번 프로젝트의 우선순위는 FE/BE를 안정적으로 분리 배포하고, main 브랜치 기준으로 자동 배포되는 구조를 만드는 것이다.
 
-따라서 최종 구조는 다음을 목표로 한다.
+따라서 최종 구조는 다음을 목표로 한다. AWS Terraform의 범위는 BE와 데이터 계층이며 FE hosting은 Vercel이 담당한다.
 
 ```text
-FE: React 정적 파일 -> S3 + CloudFront
+FE: React/Vite -> Vercel
 BE: Spring Boot Docker Image -> ECR -> ECS Fargate
 DB: PostgreSQL -> RDS
 Cache/Token State: Redis -> ElastiCache
 Ingress: ALB
-Secret: Secrets Manager 또는 SSM Parameter Store
+Asset: Community image -> private S3
+Secret: SSM Parameter Store
 Logs: CloudWatch
-CI/CD: FE main, BE main 각각 GitHub Actions 연결
+CI/CD: FE main -> Vercel, BE main -> GitHub Actions/ECS
 IaC: infra repo의 Terraform HCL
 ```
 
@@ -40,7 +41,7 @@ IaC: infra repo의 Terraform HCL
 ```text
 illowa-jeolla/FE
 ├── React/Vite app
-└── .github/workflows/deploy-fe.yml
+└── Vercel project configuration
 
 illowa-jeolla/BE
 ├── Spring Boot app
@@ -54,14 +55,14 @@ illowa-jeolla/infra
 
 역할:
 
-- `FE`: React 코드와 FE 정적 배포 파이프라인
+- `FE`: React 코드와 Vercel 배포 설정
 - `BE`: Spring Boot 코드와 BE ECS 배포 파이프라인
-- `infra`: VPC, ECS, ALB, RDS, Redis, S3, CloudFront, ECR, IAM, GitHub OIDC 등 AWS 리소스 정의
+- `infra`: VPC, ECS, ALB, RDS, Redis, community image S3, ECR, IAM, GitHub OIDC 등 BE용 AWS 리소스 정의
 
 애플리케이션 배포와 인프라 변경은 분리한다. FE/BE 코드가 바뀔 때마다 Terraform apply를 실행하지 않는다.
 
 ```text
-FE main push -> FE 앱 배포
+FE main push -> Vercel production 배포
 BE main push -> BE 앱 배포
 infra main 변경 -> AWS 인프라 plan/apply
 ```
@@ -117,27 +118,17 @@ tour_gong
 ```text
 Users
   |
-  v
-Route 53
+  +--> Vercel React/Vite
   |
-  +------------------------------+
-  |                              |
-  v                              v
-CloudFront                       ALB
-  |                              |
-  v                              v
-S3 React 정적 파일               ECS Fargate Service
-                                 |
-                                 v
-                           Spring Boot Container
-                                 |
-                 +---------------+---------------+
-                 |                               |
-                 v                               v
-           RDS PostgreSQL                 ElastiCache Redis
-                                 |
-                                 v
-                           External APIs
+  +--> api.<domain> / HTTPS ALB
+                         |
+                         v
+                   ECS Fargate API
+                         |
+              +----------+----------+
+              |          |          |
+              v          v          v
+             RDS       Redis    private S3 assets
 ```
 
 AWS 리소스 기준:
@@ -145,10 +136,6 @@ AWS 리소스 기준:
 ```text
 AWS
 ├── Route 53
-├── S3
-│   └── React 정적 파일
-├── CloudFront
-│   └── FE 배포
 ├── VPC
 │   ├── Public Subnet A
 │   │   ├── ALB
@@ -171,6 +158,8 @@ AWS
 │   └── Service
 ├── RDS PostgreSQL
 ├── ElastiCache Redis
+├── S3
+│   └── Community images
 ├── Secrets Manager 또는 SSM Parameter Store
 └── CloudWatch Logs
 ```
@@ -186,14 +175,11 @@ infra 레포 구조 초안:
 ```text
 infra
 ├── README.md
+├── bootstrap
+│   └── remote-state
 ├── environments
-│   ├── dev
-│   │   ├── main.tf
-│   │   ├── providers.tf
-│   │   ├── variables.tf
-│   │   ├── outputs.tf
-│   │   └── terraform.tfvars.example
-│   └── prod
+│   └── main
+│       ├── backend.tf
 │       ├── main.tf
 │       ├── providers.tf
 │       ├── variables.tf
@@ -201,14 +187,14 @@ infra
 │       └── terraform.tfvars.example
 ├── modules
 │   ├── network
-│   ├── s3-cloudfront
+│   ├── s3-assets
 │   ├── ecr
 │   ├── alb
-│   ├── ecs
+│   ├── ecs-api
 │   ├── rds
 │   ├── redis
 │   ├── secrets
-│   └── iam-github-oidc
+│   └── github-oidc
 └── .github
     └── workflows
         └── terraform.yml
@@ -224,15 +210,14 @@ Terraform으로 관리할 리소스:
 - NAT Gateway
 - Route Table
 - Security Group
-- S3 bucket for FE
-- CloudFront distribution
+- S3 bucket for community images
 - ECR repository
 - ALB
 - Target Group
 - ECS Cluster
 - ECS Task Definition
 - ECS Service
-- ECS Auto Scaling
+- ECS Auto Scaling (scheduler 분리 또는 분산 lock 적용 후 선택)
 - RDS PostgreSQL
 - ElastiCache Redis
 - Secrets Manager 또는 SSM Parameter Store
@@ -240,14 +225,14 @@ Terraform으로 관리할 리소스:
 - GitHub Actions OIDC Provider/Role
 - CloudWatch Log Group
 
-Terraform state는 로컬 파일로 관리하지 않는다. S3 backend와 DynamoDB lock을 사용한다.
+Terraform state는 로컬 파일로 관리하지 않는다. S3 backend와 native lockfile을 사용한다.
 
 ```text
 Terraform state -> S3
-Terraform lock  -> DynamoDB
+Terraform lock  -> S3 native lockfile
 ```
 
-단, S3 backend와 DynamoDB lock table을 최초로 만드는 bootstrap 단계는 별도 HCL 또는 수동 1회 작업으로 분리한다. 이후 나머지 인프라는 remote backend를 사용한다.
+단, S3 backend bucket을 최초로 만드는 `bootstrap/remote-state`는 로컬 state로 한 번 실행한다. 이후 `environments/main`은 Terraform 1.10 이상의 `use_lockfile = true` 설정으로 remote backend를 사용한다. deprecated된 DynamoDB locking은 새로 만들지 않는다.
 
 ## ECS 구성 개념
 
@@ -273,31 +258,15 @@ ECS Cluster
 예시:
 
 ```text
-travel-prod-cluster
-└── travel-api-service
-    ├── task 1
-    │   └── travel-api container
-    └── task 2
-        └── travel-api container
+illowa-jeolla-main-cluster
+└── illowa-jeolla-main-api-svc
+    └── task 1
+        └── api container
 ```
 
 ## FE 배포 구조
 
-FE 운영 배포 대상은 React/Vite 빌드 결과물이다.
-
-```bash
-cd FE/--main/travel-workation/react-app
-pnpm install
-pnpm build
-```
-
-현재 Vite 설정상 빌드 결과는 아래 경로에 생성된다.
-
-```text
-FE/--main/travel-workation/react-dist
-```
-
-운영 배포는 이 정적 파일을 S3에 업로드하고 CloudFront로 제공한다.
+FE React/Vite 앱은 Vercel project로 배포한다. FE 정적 파일을 AWS S3에 업로드하거나 CloudFront invalidation을 실행하지 않는다. Vercel project와 domain은 FE 담당 범위이며 Terraform으로 관리하지 않는다.
 
 운영 환경변수 예시:
 
@@ -314,9 +283,10 @@ VITE_AUTH_API_BASE_PATH=/api/v1
 - `FE/--main/travel-workation/server.js`는 운영 백엔드로 보지 않는다.
 - `FE/--main/travel-workation/data/workation.db`는 운영 DB로 사용하지 않는다.
 - FE의 기존 `/api/*` 호출은 BE API 명세 기준으로 `/api/v1/*` 또는 운영 API URL에 맞춰 정리한다.
-- `vite.config.js`의 `base` 값은 운영 URL 정책에 맞춘다.
-  - 루트 도메인 배포: `base: "/"`
-  - `/app/` 하위 경로 배포: `base: "/app/"`
+- `VITE_API_BASE_URL`과 `VITE_AUTH_API_ORIGIN`에는 AWS BE의 HTTPS URL을 넣는다.
+- Vercel production domain을 BE의 `FRONTEND_ORIGIN`과 `FRONTEND_OAUTH_CALLBACK_URI`에 반영한다.
+- Vite SPA deep link를 위해 FE project root에 `vercel.json` rewrite를 둔다.
+- Vercel preview URL은 기본 CORS 허용 대상에서 제외하고, 초기 배포는 고정 production domain만 연동한다.
 
 ## BE 배포 구조
 
@@ -397,10 +367,16 @@ Spring Boot
 /api/v1/auth/google
 /api/v1/tour
 /api/v1/jobs/external
+/api/v1/jobs/applications
+/api/v1/jobs/favorites
 /api/v1/gatherings
+/api/v1/community/travel-posts
+/api/v1/ai-matches
 /api/v1/travel-guides
 /api/v1/travel-recommendations
 /api/v1/locations
+/api/v1/regions
+/api/v1/users/me
 ```
 
 FE는 BE가 작성한 API 명세서를 기준으로 화면별 호출을 정리한다. FE 저장소의 Node API는 명세 확정 전 임시 목업으로만 사용한다.
@@ -435,11 +411,11 @@ Public Subnet B
 
 Private App Subnet A
 └── ECS Fargate Task
-    └── travel-api container
+    └── api container
 
 Private App Subnet B
 └── ECS Fargate Task
-    └── travel-api container
+    └── api container
 
 Private DB Subnet A
 └── RDS PostgreSQL Primary
@@ -463,7 +439,7 @@ Public Subnet A
 └── NAT Gateway 1개
 
 Private App Subnet A/B
-└── ECS Fargate Service desired count 2
+└── ECS Fargate Service desired count 1
 
 Private DB Subnet A/B
 └── RDS PostgreSQL Single-AZ + DB Subnet Group
@@ -479,21 +455,25 @@ Private Cache Subnet A/B
 ECS Cluster:
 
 ```text
-name: travel-prod-cluster
+name: illowa-jeolla-main-cluster
 launch type: Fargate
 ```
 
 Task Definition:
 
 ```text
-family: travel-api
-container: travel-api
-image: <account-id>.dkr.ecr.ap-northeast-2.amazonaws.com/travel-api:<git-sha>
+family: illowa-jeolla-main-api
+container: api
+image: <account-id>.dkr.ecr.ap-northeast-2.amazonaws.com/illowa-jeolla-main-api:<git-sha>
+operating system family: LINUX
+cpu architecture: X86_64
 port: 8080
 cpu: 512 또는 1024
 memory: 1024 또는 2048
 log driver: awslogs
 ```
+
+ECR용 image는 `linux/amd64`로 빌드한다. Apple Silicon에서 로컬 기본값으로 만든 `arm64` image는 로컬 검증용이며, 위 `X86_64` task definition과 혼용하지 않는다.
 
 초기 권장값:
 
@@ -505,19 +485,21 @@ log driver: awslogs
 ECS Service:
 
 ```text
-name: travel-api-service
-desired count: 2
+name: illowa-jeolla-main-api-svc
+desired count: 1
 subnets: private app subnet A/B
 security group: ECS Task SG
 target group: ALB target group
 deployment type: rolling update
 ```
 
-Auto Scaling:
+초기에는 API 프로세스에서 scheduler도 실행하므로 Auto Scaling을 사용하지 않는다. scheduler를 EventBridge Scheduler로 분리하거나 분산 lock을 적용한 뒤에만 아래 구성을 검토한다.
 
 ```text
-min tasks: 2
-desired tasks: 2
+Auto Scaling 후보:
+
+min tasks: 1
+desired tasks: 1
 max tasks: 4
 target CPU utilization: 60~70%
 ```
@@ -529,20 +511,22 @@ ALB
 ├── Listener 80
 │   └── redirect to 443
 └── Listener 443
-    └── target group: ECS travel-api:8080
+    └── target group: ECS api:8080
 ```
 
 도메인 예시:
 
 ```text
-www.example.com -> CloudFront
+www.example.com -> Vercel
 api.example.com -> ALB
 ```
+
+Vercel은 HTTPS로 제공되므로 브라우저가 직접 호출하는 BE도 HTTPS여야 한다. 현재 ALB 구조에서는 `api.<domain>` Route 53 record, ACM certificate, 443 listener를 첫 통합 배포 전에 준비한다.
 
 BE health check endpoint는 Actuator를 붙인 뒤 아래 형태로 둔다.
 
 ```text
-GET /actuator/health
+GET /actuator/health/liveness
 ```
 
 ## 보안 그룹
@@ -616,7 +600,7 @@ Terraform module은 초기에는 single node와 replication group을 모두 표�
 module "redis" {
   source = "../../modules/redis"
 
-  name_prefix    = "travel-prod"
+  name_prefix    = "illowa-jeolla-main"
   vpc_id         = module.network.vpc_id
   subnet_ids     = module.network.private_cache_subnet_ids
   allowed_sg_ids = [module.ecs.task_security_group_id]
@@ -704,7 +688,7 @@ management.endpoint.health.probes.enabled=true
 
 ## CI/CD 방향
 
-FE와 BE는 각각의 main 브랜치에 CI/CD를 붙인다. infra는 별도 레포에서 Terraform CI를 붙인다.
+FE main은 Vercel Git integration으로 배포한다. BE와 infra는 GitHub Actions를 사용한다.
 
 FE main push:
 
@@ -712,13 +696,12 @@ FE main push:
 FE main push
   |
   v
-GitHub Actions
+Vercel build/deploy
   |
-  +--> pnpm install
-  +--> pnpm build
-  +--> S3 sync
-  +--> CloudFront invalidation
-  +--> 배포 URL HTTP 200 확인
+  +--> production 환경변수 주입
+  +--> Vite build
+  +--> Vercel CDN 배포
+  +--> production URL 확인
 ```
 
 BE main push:
@@ -740,7 +723,7 @@ GitHub Actions
 BE image tag는 `latest`만 쓰지 않고 git sha를 같이 사용한다.
 
 ```text
-travel-api:<git-sha>
+illowa-jeolla-main-api:<git-sha>
 ```
 
 AWS 인증은 가능하면 GitHub Actions OIDC + AWS IAM Role을 사용한다. 장기 AWS access key를 GitHub Secrets에 저장하는 방식은 초기에는 가능하지만 최종 운영 구조로는 덜 안전하다.
@@ -781,36 +764,35 @@ GitHub Actions
 
 ### 2단계: BE Docker 배포 준비
 
-- BE Dockerfile 작성
-- BE `.dockerignore` 작성
-- prod profile 작성
-- Actuator health check 추가
-- `ddl-auto: update` 운영 제거
-- Flyway migration 기준으로 DB 스키마 관리
+- BE Dockerfile 작성 완료
+- BE `.dockerignore` 작성 완료
+- prod profile 초안 작성 완료
+- Actuator liveness health check 추가 완료
+- 초기 제출 배포는 `ddl-auto: update` 사용
+- 배포 안정화 후 migration 도구 도입 및 `ddl-auto: validate` 전환
 - 로컬에서 BE image build 확인
 - BE container 단독 실행 확인
 
-### 3단계: FE 정적 배포 준비
+### 3단계: Vercel FE 연동 준비
 
 - React 앱의 API base URL 환경변수 정리
-- 운영 도메인 기준 OAuth redirect URI 정리
-- `pnpm build` 확인
-- `react-dist` 산출물 확인
-- S3 + CloudFront 배포 방식 결정
+- Vercel production domain 확정
+- 운영 domain 기준 OAuth callback 정리
+- `vercel.json` SPA rewrite 적용
+- Vercel production 환경변수에 BE HTTPS URL 등록
 
 ### 4단계: infra 레포 생성과 Terraform 기반 AWS 리소스 정의
 
 - `illowa-jeolla/infra` 레포 생성
 - Terraform HCL 디렉터리 구조 작성
-- S3 backend와 DynamoDB lock 구성
+- S3 backend와 native lockfile 구성
 - GitHub Actions OIDC Role 정의
 - Terraform fmt/validate/plan workflow 작성
 
 ### 5단계: AWS 기본 리소스 생성
 
-- Route 53 도메인 정리
-- S3 버킷 생성
-- CloudFront 배포 생성
+- BE API용 Route 53 domain과 ACM certificate 준비
+- Terraform state 및 community image S3 bucket 생성
 - VPC 구성
 - Public Subnet 2개 생성
 - Private App Subnet 2개 생성
@@ -829,22 +811,22 @@ GitHub Actions
 - ECS Task Definition 등록
 - ECS Service 생성
 - ALB Target Group 연결
-- `https://api.example.com/actuator/health` 확인
+- `https://api.example.com/actuator/health/liveness` 확인
 - 주요 API 동작 확인
 - OAuth redirect URI를 운영 API 도메인으로 변경
 - CloudWatch 로그 확인
 
-### 7단계: FE 배포
+### 7단계: Vercel FE 배포 및 통합
 
-- FE main 기준 `pnpm build`
-- 빌드 결과를 S3에 업로드
-- CloudFront invalidation 실행
-- FE 도메인 접속 확인
+- FE main을 Vercel production으로 배포
+- Vercel production domain을 BE CORS와 OAuth 완료 redirect에 반영
+- ECS task를 새 설정으로 재배포
+- Vercel SPA deep link 확인
 - FE에서 BE API 호출 확인
 
 ### 8단계: 운영 보강
 
-- ECS Service Auto Scaling 추가
+- scheduler 분리 또는 분산 lock 적용 후 ECS Service Auto Scaling 검토
 - RDS 백업/스냅샷 정책 확인
 - Redis replication group 검토
 - NAT Gateway 이중화 검토
@@ -873,14 +855,15 @@ GitHub Actions
 - FE API 호출을 Spring BE API로 정리
 
 운영:
-- FE: S3 + CloudFront
+- FE: Vercel
 - BE: ECS Fargate + ECR + ALB
 - DB/Cache: RDS + ElastiCache
-- Secret/Log: Secrets Manager 또는 SSM + CloudWatch
+- Asset: private S3
+- Secret/Log: SSM Parameter Store + CloudWatch
 - IaC: 별도 infra 레포 + Terraform HCL
 
 CI/CD:
-- FE main push -> FE 운영 배포
+- FE main push -> Vercel 운영 배포
 - BE main push -> BE 운영 배포
 - infra main -> Terraform plan/apply
 ```
