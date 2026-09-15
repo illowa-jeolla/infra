@@ -1,6 +1,6 @@
 # Deployment Contract
 
-최종 갱신일: 2026-09-14
+최종 갱신일: 2026-09-15
 
 이 문서는 Vercel FE와 AWS에 배포하는 BE API가 함께 지켜야 할 계약을 정의한다.
 
@@ -87,8 +87,8 @@ AI 후보 동기화 cron은 desired count 1인 API task에서 실행한다. API 
 | --- | --- | --- |
 | API endpoint | `/actuator/health/liveness` | 확정 |
 | Success | HTTP `200` | 확정 |
-| Interval / timeout | 30초 / 5초 | 제안 |
-| Healthy / unhealthy threshold | 2 / 3 | 제안 |
+| Interval / timeout | 30초 / 5초 | 확정 |
+| Healthy / unhealthy threshold | 2 / 3 | 확정 |
 
 Actuator와 health probe를 활성화한다. ALB는 DB, Redis 등 외부 의존성 장애와 분리된 liveness endpoint를 사용하고, 의존 서비스 상태는 기본 health 또는 별도 운영 점검으로 확인한다.
 
@@ -237,7 +237,7 @@ migration 도구가 아직 없으므로 첫 배포 기본값은 `JPA_DDL_AUTO=up
 FE/--main/travel-workation/react-app
 ```
 
-FE 빌드와 배포 설정은 Vercel 프로젝트가 소유한다. AWS Terraform은 Vercel project, deployment, domain을 관리하지 않는다. AWS 측 계약은 Vercel production origin과 BE HTTPS API URL의 연결에 한정한다.
+FE 빌드와 배포 설정은 Vercel 프로젝트가 소유한다. AWS Terraform은 Vercel project, deployment, domain을 관리하지 않는다. 최종 Vercel production origin은 `https://illowa-jeolla.cloud`, BE HTTPS API URL은 `https://api.illowa-jeolla.cloud`로 확정했다.
 
 ```text
 VITE_API_BASE_URL
@@ -247,7 +247,7 @@ VITE_AUTH_API_ORIGIN
 VITE_AUTH_API_BASE_PATH
 ```
 
-`VITE_` 값은 bundle에 노출되므로 secret을 넣지 않는다. `VITE_API_BASE_URL`과 `VITE_AUTH_API_ORIGIN`에는 AWS에 배포한 BE의 HTTPS URL을 넣는다. Vercel 환경변수 변경 후에는 새 production deployment가 필요하다.
+`VITE_` 값은 bundle에 노출되므로 secret을 넣지 않는다. `VITE_API_BASE_URL`과 `VITE_AUTH_API_ORIGIN`에는 `https://api.illowa-jeolla.cloud`를 넣는다. Vercel 환경변수 변경 후에는 새 production deployment가 필요하다.
 
 Vite SPA의 직접 경로 접근을 위해 FE project root에 `vercel.json` rewrite가 필요하다. Vercel preview URL은 배포마다 달라질 수 있으므로 초기 운영에서는 고정된 production domain만 BE CORS에 허용한다.
 
@@ -257,8 +257,10 @@ Vite SPA의 직접 경로 접근을 위해 FE project root에 `vercel.json` rewr
 - OAuth 완료 후 이동할 URL은 `FRONTEND_OAUTH_CALLBACK_URI`에 설정한다.
 - 현재 BE CORS는 origin 하나와 credentials를 허용하므로 production URL을 정확히 설정한다.
 - refresh token cookie는 운영에서 `Secure; SameSite=None`을 사용하므로 FE와 BE 모두 HTTPS여야 한다.
-- ALB를 직접 공개하는 현재 구조에서는 `api.<domain>` DNS, ACM certificate, HTTPS listener를 배포 필수 범위에 포함한다.
-- Kakao/Google provider redirect URI는 BE HTTPS callback URL을 사용한다.
+- `api.illowa-jeolla.cloud` CNAME과 ACM certificate 검증을 완료하고 ALB HTTPS listener에 연결한다.
+- Kakao redirect URI는 `https://api.illowa-jeolla.cloud/api/v1/auth/kakao/callback`을 사용한다.
+- Google redirect URI는 `https://api.illowa-jeolla.cloud/api/v1/auth/google/callback`을 사용한다.
+- OAuth 완료 후 FE redirect는 `https://illowa-jeolla.cloud/oauth/callback`을 사용한다.
 
 ## 11. IAM
 
@@ -275,6 +277,10 @@ Task execution role:
 
 BE와 infra GitHub Actions는 장기 access key 대신 OIDC를 사용한다. FE 배포는 Vercel이 담당하며 AWS OIDC role을 사용하지 않는다.
 
+초기 ALB/ECS 기반 적용 시에는 아직 운영 FE URL과 OAuth/JWT secret이 확정되지 않았으므로 ECS Service의 desired count를 0으로 유지한다. Terraform은 필수 일반 환경변수와 SSM secret ARN이 모두 설정되지 않은 상태에서 desired count를 1로 올리는 plan을 차단한다.
+
+ALB 80 listener는 HTTPS로 redirect하고 443 listener는 발급된 `api.illowa-jeolla.cloud` ACM certificate를 사용해 target group으로 전달한다.
+
 ## 12. Logging
 
 - API 전용 log group을 사용한다.
@@ -289,8 +295,8 @@ BE와 infra GitHub Actions는 장기 access key 대신 OIDC를 사용한다. FE 
 - [ ] RDS `vector` extension 생성 및 vector query 검증
 - [ ] ElastiCache TLS/AUTH 실제 연결 검증
 - [ ] DB migration 또는 `ddl-auto` 위험 수용 결정
-- [ ] BE HTTPS API domain 및 ACM certificate 확정
-- [ ] Vercel production origin 및 OAuth callback 확정
+- [x] BE HTTPS API domain 및 ACM certificate 확정
+- [x] Vercel production origin 및 OAuth callback 확정
 - [ ] FE Vercel 환경변수와 SPA rewrite 적용
 - [ ] 생성된 S3 객체 접근 정책을 ECS API task role에 연결
 - [ ] 생성된 SSM 읽기 정책을 ECS API task execution role에 연결

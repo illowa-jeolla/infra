@@ -99,3 +99,103 @@ variable "redis_auth_token_version" {
   type        = number
   default     = 1
 }
+
+variable "api_domain_name" {
+  description = "Active public custom domain used by the backend API."
+  type        = string
+  default     = "api.illowa-jeolla.cloud"
+}
+
+variable "api_certificate_domain_names" {
+  description = "API domains with independently managed ACM certificates during DNS migration."
+  type        = set(string)
+  default = [
+    "api.cltrmp.cloud",
+    "api.illowa-jeolla.cloud",
+  ]
+
+  validation {
+    condition     = contains(var.api_certificate_domain_names, var.api_domain_name)
+    error_message = "api_certificate_domain_names must include api_domain_name."
+  }
+}
+
+variable "api_image_tag" {
+  description = "Immutable ECR image tag deployed by the ECS API service."
+  type        = string
+  default     = "225fca632481"
+
+  validation {
+    condition     = length(trimspace(var.api_image_tag)) > 0 && var.api_image_tag != "latest"
+    error_message = "api_image_tag must be a non-empty immutable tag and cannot be latest."
+  }
+}
+
+variable "api_task_cpu" {
+  description = "Fargate API task CPU units."
+  type        = number
+  default     = 512
+}
+
+variable "api_task_memory" {
+  description = "Fargate API task memory in MiB."
+  type        = number
+  default     = 1024
+}
+
+variable "api_desired_count" {
+  description = "API task count. Keep at zero until all production URLs and secrets are configured."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.api_desired_count >= 0 && var.api_desired_count <= 1
+    error_message = "api_desired_count must be 0 or 1 while schedulers run inside the API process."
+  }
+}
+
+variable "api_log_retention_days" {
+  description = "CloudWatch retention period for API logs."
+  type        = number
+  default     = 14
+}
+
+variable "api_environment" {
+  description = "Production-specific plain-text API environment variables merged with infrastructure values."
+  type        = map(string)
+  default     = {}
+}
+
+variable "api_secret_parameter_arns" {
+  description = "Additional API secret environment variable names mapped to existing SSM parameter ARNs."
+  type        = map(string)
+  default     = {}
+}
+
+variable "api_required_environment_names" {
+  description = "Environment variables required before the ECS API task count can exceed zero."
+  type        = set(string)
+  default = [
+    "JWT_ACCESS_EXPIRATION",
+    "JWT_REFRESH_EXPIRATION",
+    "JWT_COOKIE_SECURE",
+    "KAKAO_CLIENT_ID",
+    "KAKAO_REDIRECT_URI",
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_REDIRECT_URI",
+    "FRONTEND_OAUTH_CALLBACK_URI",
+    "FRONTEND_ORIGIN",
+  ]
+}
+
+variable "api_required_secret_names" {
+  description = "SSM-backed secrets required before the ECS API task count can exceed zero."
+  type        = set(string)
+  default = [
+    "POSTGRES_PASSWORD",
+    "REDIS_PASSWORD",
+    "JWT_SECRET",
+    "KAKAO_CLIENT_SECRET",
+    "GOOGLE_CLIENT_SECRET",
+  ]
+}

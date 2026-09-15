@@ -120,7 +120,7 @@ Users
   |
   +--> Vercel React/Vite
   |
-  +--> api.<domain> / HTTPS ALB
+  +--> api.illowa-jeolla.cloud / HTTPS ALB
                          |
                          v
                    ECS Fargate API
@@ -271,10 +271,10 @@ FE React/Vite 앱은 Vercel project로 배포한다. FE 정적 파일을 AWS S3�
 운영 환경변수 예시:
 
 ```text
-VITE_API_BASE_URL=https://api.example.com
+VITE_API_BASE_URL=https://api.illowa-jeolla.cloud
 VITE_KAKAO_MAP_JAVASCRIPT_KEY=...
 VITE_AUTH_API_ENABLED=true
-VITE_AUTH_API_ORIGIN=https://api.example.com
+VITE_AUTH_API_ORIGIN=https://api.illowa-jeolla.cloud
 VITE_AUTH_API_BASE_PATH=/api/v1
 ```
 
@@ -514,14 +514,16 @@ ALB
     └── target group: ECS api:8080
 ```
 
-도메인 예시:
+운영 URL과 ACM certificate를 준비하기 전 기반 생성 단계에서는 80 listener가 target group으로 직접 전달할 수 있다. 이 HTTP 경로는 초기 health 검증용이며, certificate 적용 후에는 위 구조처럼 80을 443으로 redirect한다. Vercel에서 호출하는 운영 API URL은 반드시 HTTPS를 사용한다.
+
+현재 운영 도메인:
 
 ```text
-www.example.com -> Vercel
-api.example.com -> ALB
+illowa-jeolla.cloud -> Vercel
+api.illowa-jeolla.cloud -> ALB
 ```
 
-Vercel은 HTTPS로 제공되므로 브라우저가 직접 호출하는 BE도 HTTPS여야 한다. 현재 ALB 구조에서는 `api.<domain>` Route 53 record, ACM certificate, 443 listener를 첫 통합 배포 전에 준비한다.
+Vercel은 HTTPS로 제공되므로 브라우저가 직접 호출하는 BE도 HTTPS여야 한다. 외부 DNS에서 `api.illowa-jeolla.cloud`를 ALB로 연결하고 ACM certificate와 443 listener를 적용했다.
 
 BE health check endpoint는 Actuator를 붙인 뒤 아래 형태로 둔다.
 
@@ -805,7 +807,7 @@ GitHub Actions
 - ECS Task Definition 등록
 - ECS Service 생성
 - ALB Target Group 연결
-- `https://api.example.com/actuator/health/liveness` 확인
+- `https://api.illowa-jeolla.cloud/actuator/health/liveness` 확인
 - 주요 API 동작 확인
 - OAuth redirect URI를 운영 API 도메인으로 변경
 - CloudWatch 로그 확인
