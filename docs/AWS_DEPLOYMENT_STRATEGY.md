@@ -566,8 +566,8 @@ Redis 장애 시 영향은 사용 목적에 따라 달라진다. 단순 API 응�
 초기 비용 절감형 구성:
 
 ```text
-ElastiCache Redis
-- node type: cache.t4g.micro 또는 cache.t4g.small
+ElastiCache Redis 7.1
+- node type: cache.t4g.micro
 - single node
 - Multi-AZ disabled
 - automatic failover disabled
@@ -576,7 +576,7 @@ ElastiCache Redis
 - encryption at rest enabled
 - encryption in transit enabled
 - AUTH token enabled
-- snapshot retention 1~3일
+- snapshot retention 1일
 ```
 
 운영 안정형 구성:
@@ -594,34 +594,28 @@ ElastiCache Redis Replication Group
 - snapshot retention 3~7일
 ```
 
-Terraform module은 초기에는 single node와 replication group을 모두 표현할 수 있게 입력값을 둔다.
+초기 Terraform module은 replication group 안에 cache cluster 1개를 두는 single-node 구성을 사용한다. 운영 안정형 전환 시 replica와 Multi-AZ/failover 입력을 추가한다.
 
 ```hcl
 module "redis" {
   source = "../../modules/redis"
 
-  name_prefix    = "illowa-jeolla-main"
-  vpc_id         = module.network.vpc_id
-  subnet_ids     = module.network.private_cache_subnet_ids
-  allowed_sg_ids = [module.ecs.task_security_group_id]
+  replication_group_id        = "illowa-jeolla-main-redis"
+  subnet_group_name           = "illowa-jeolla-main-redis-subnets"
+  parameter_group_name        = "illowa-jeolla-main-redis"
+  subnet_ids                  = module.network.private_data_subnet_ids
+  security_group_id           = module.security_groups.redis_security_group_id
+  preferred_availability_zone = "ap-northeast-2a"
 
   engine_version = "7.1"
   node_type      = "cache.t4g.micro"
 
-  mode                       = "single"
-  replicas_per_node_group    = 0
-  automatic_failover_enabled = false
-  multi_az_enabled           = false
-
-  at_rest_encryption_enabled = true
-  transit_encryption_enabled = true
-  auth_token_enabled         = true
-
-  snapshot_retention_limit = 1
+  auth_token         = module.secrets.redis_auth_token
+  auth_token_version = var.redis_auth_token_version
 }
 ```
 
-운영 안정형으로 전환할 때는 아래 값들을 변경한다.
+운영 안정형으로 전환할 때는 module에 replica 관련 입력을 추가하고 아래 값들을 적용한다.
 
 ```hcl
 mode                       = "replication_group"
@@ -632,7 +626,7 @@ multi_az_enabled           = true
 snapshot_retention_limit   = 7
 ```
 
-Redis AUTH token은 Terraform 코드나 tfvars에 평문으로 두지 않는다. Secrets Manager 또는 SSM Parameter Store에 저장하고 ECS Task Definition에서 secret으로 주입한다. Terraform state에 민감 값이 남을 수 있는 방식은 피한다.
+Redis AUTH token은 Terraform 코드나 tfvars에 평문으로 두지 않는다. 현재 구현은 Terraform 1.11 이상의 ephemeral resource와 write-only 속성을 사용해 SSM Parameter Store, ElastiCache에 전달하며 plan/state에는 실제 값을 저장하지 않는다. ECS Task Definition에서는 SSM parameter를 `REDIS_PASSWORD` secret으로 주입한다.
 
 ## 운영 환경변수
 

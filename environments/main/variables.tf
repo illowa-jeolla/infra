@@ -57,3 +57,45 @@ variable "ecr_untagged_image_retention_days" {
   type        = number
   default     = 7
 }
+
+variable "postgres_engine_version" {
+  description = "RDS PostgreSQL engine version."
+  type        = string
+  default     = "17.11"
+}
+
+variable "postgres_instance_class" {
+  description = "RDS PostgreSQL instance class."
+  type        = string
+  default     = "db.t4g.micro"
+}
+
+variable "postgres_allocated_storage" {
+  description = "RDS PostgreSQL gp3 storage in GiB."
+  type        = number
+  default     = 20
+}
+
+variable "postgres_password_version" {
+  description = "Version used to trigger PostgreSQL password rotation."
+  type        = number
+  default     = 1
+}
+
+variable "redis_engine_version" {
+  description = "ElastiCache Redis engine version."
+  type        = string
+  default     = "7.1"
+}
+
+variable "redis_node_type" {
+  description = "ElastiCache Redis node type."
+  type        = string
+  default     = "cache.t4g.micro"
+}
+
+variable "redis_auth_token_version" {
+  description = "Version used to trigger Redis AUTH token rotation."
+  type        = number
+  default     = 1
+}
