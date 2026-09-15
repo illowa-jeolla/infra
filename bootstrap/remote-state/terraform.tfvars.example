@@ -1,0 +1,5 @@
+aws_region  = "ap-northeast-2"
+project_name = "illowa-jeolla"
+
+# Usually omit this value so the account ID is appended automatically.
+# state_bucket_name = "illowa-jeolla-tfstate-123456789012"
