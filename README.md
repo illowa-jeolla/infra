@@ -59,6 +59,7 @@ S3는 Terraform remote state와 커뮤니티 이미지 저장에만 사용합니
 - Terraform state 파일은 커밋하지 않습니다.
 - 실제 값이 들어간 `.tfvars` 파일은 커밋하지 않습니다.
 - Terraform 코드, Markdown 문서, 예시 파일에 secret 값을 저장하지 않습니다.
+- main 환경은 secret의 write-only/ephemeral 처리를 위해 Terraform 1.11 이상을 사용합니다.
 - `terraform.tfvars.example`에는 민감하지 않은 샘플 값만 작성합니다.
 - 인프라 변경 전 `terraform fmt`와 `terraform validate`를 실행합니다.
 - `terraform apply` 전에는 항상 `terraform plan` 결과를 검토합니다.
@@ -78,4 +79,4 @@ terraform validate
 terraform plan
 ```
 
-현재 main 환경은 Network와 ECR 모듈을 연결합니다. `terraform plan` 결과를 검토하고 명시적으로 승인하기 전에는 `terraform apply`를 실행하지 않습니다.
+현재 main 환경에는 Network, ECR, Security Group, 커뮤니티 이미지 S3, RDS, Redis, DB/Redis 비밀번호용 SSM Parameter Store와 읽기 IAM 정책이 적용돼 있습니다. 이후 인프라 변경도 `terraform plan` 검토와 명시적 승인 후 적용합니다.

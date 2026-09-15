@@ -102,7 +102,8 @@ Spring Security는 `/actuator/health`와 하위 경로를 인증 없이 허용�
 | Network | ECS security group에서만 접근 | 확정 |
 | Public access | 비활성화 | 확정 |
 | Availability | Single-AZ | 확정 |
-| Target version | PostgreSQL 17 계열 | 제안 |
+| Target version | PostgreSQL 17.11 | 확정 |
+| Instance / storage | `db.t4g.micro`, gp3 20 GiB | 확정 |
 | Required extension | `vector` | 확정 |
 | Current schema setting | `ddl-auto: update` | 확정 |
 | Migration policy | 미정 | 미정 |
@@ -115,7 +116,7 @@ POSTGRES_USER
 POSTGRES_PASSWORD
 ```
 
-`POSTGRES_PASSWORD`는 secret으로 주입한다. 가능하면 migration 도구 적용 후 `ddl-auto: validate`를 사용한다. `update`를 유지한다면 제출용 데이터 손실 위험을 수용해야 한다.
+`POSTGRES_PASSWORD`는 SSM Parameter Store의 `/illowa-jeolla/main/db/password`에서 ECS secret으로 주입한다. 가능하면 migration 도구 적용 후 `ddl-auto: validate`를 사용한다. `update`를 유지한다면 제출용 데이터 손실 위험을 수용해야 한다.
 
 현재 Spring Batch metadata 설정은 `initialize-schema: always`다. API 컨테이너 시작 시 초기화 동작을 검증하고 운영 profile 값을 별도로 정해야 한다.
 
@@ -125,16 +126,17 @@ POSTGRES_PASSWORD
 CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
-로컬 환경은 `pgvector/pgvector:pg17` image를 사용한다. Terraform 작성 시 선택한 RDS PostgreSQL engine version에서 `pgvector`를 지원하는지 확인해야 한다.
+로컬 환경은 `pgvector/pgvector:pg17` image를 사용한다. AWS 공식 extension 지원 목록에서 RDS PostgreSQL 17.11의 `pgvector` 지원을 확인했다. 단, RDS 생성만으로 extension이 자동 생성되지는 않으므로 첫 애플리케이션 배포 전에 위 SQL을 실행해야 한다.
 
 ## 6. Redis
 
 | 항목 | 값 | 상태 |
 | --- | --- | --- |
 | Service | ElastiCache Redis | 확정 |
+| Engine version / node | Redis 7.1, `cache.t4g.micro` | 확정 |
 | Topology | single node | 확정 |
 | Network | ECS security group에서만 접근 | 확정 |
-| TLS / AUTH | 활성화 | 제안 |
+| TLS / AUTH | 활성화 | 확정 |
 
 ```text
 REDIS_HOST
@@ -142,7 +144,7 @@ REDIS_PORT
 REDIS_PASSWORD
 ```
 
-운영 profile은 `REDIS_SSL`로 Redis TLS를 활성화하며 기본값은 `true`다. AUTH token은 `REDIS_PASSWORD`로 주입한다. single node 장애 시 로그인, OAuth state, 추천 cache 기능이 영향을 받는 것을 허용하는 제출용 구성이다.
+운영 profile은 `REDIS_SSL`로 Redis TLS를 활성화하며 기본값은 `true`다. AUTH token은 SSM Parameter Store의 `/illowa-jeolla/main/redis/password`에서 `REDIS_PASSWORD`로 주입한다. single node 장애 시 로그인, OAuth state, 추천 cache 기능이 영향을 받는 것을 허용하는 제출용 구성이다.
 
 ## 7. S3
 
@@ -165,7 +167,7 @@ AWS_REGION=ap-northeast-2
 
 ## 8. BE 설정값
 
-Secret으로 주입:
+SSM Parameter Store에서 secret으로 주입:
 
 ```text
 POSTGRES_PASSWORD
@@ -217,7 +219,9 @@ COMMUNITY_IMAGE_URL_EXPIRATION_MINUTES
 AWS_REGION
 ```
 
-민감값은 Git, Docker image, Terraform source, `tfvars`에 평문으로 저장하지 않고 SSM Parameter Store에서 ECS secret으로 주입한다.
+현재 Terraform이 관리하는 DB/Redis 비밀번호는 ephemeral random 값으로 생성해 SSM SecureString, RDS, ElastiCache의 write-only 속성으로 전달한다. 실제 값은 plan과 state에 저장하지 않는다. 비밀번호를 변경할 때는 대응하는 password version 변수도 증가시킨다. JWT와 OAuth client secret 등 사용자 제공 secret은 ECS 모듈 작성 시 별도 SSM parameter로 연결한다.
+
+SSM parameter 읽기 정책은 ECS task execution role에 연결한다. 커뮤니티 이미지 S3 객체 접근 정책은 애플리케이션 AWS SDK가 사용하는 ECS task role에 연결한다.
 
 BE `.env.example`의 `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`는 로컬 개발 예시일 뿐 ECS에 주입하지 않는다. ECS에서는 API task role의 임시 자격 증명을 사용한다.
 
@@ -288,7 +292,8 @@ BE와 infra GitHub Actions는 장기 access key 대신 OIDC를 사용한다. FE 
 - [ ] BE HTTPS API domain 및 ACM certificate 확정
 - [ ] Vercel production origin 및 OAuth callback 확정
 - [ ] FE Vercel 환경변수와 SPA rewrite 적용
-- [ ] `s3-assets` 모듈과 API task role 권한 구현
+- [ ] 생성된 S3 객체 접근 정책을 ECS API task role에 연결
+- [ ] 생성된 SSM 읽기 정책을 ECS API task execution role에 연결
 
 ## 14. 담당자 확인 질문
 

@@ -130,7 +130,7 @@ infra/
 - [x] 별도 Batch Worker 서버와 SQS/DLQ를 배포 범위에서 제외
 - [x] ECS 실행 모듈을 `ecs-api` 하나로 확정
 - [x] Terraform 디렉터리 구조 생성
-- [x] 빈 모듈 디렉터리에 `.gitkeep` 추가
+- [x] 미구현 모듈 디렉터리에 `.gitkeep` 추가
 - [x] `environments/main` Terraform 뼈대 파일 생성
 - [x] `DEPLOYMENT_CONTRACT.md` 문서 뼈대 생성
 - [x] `RESOURCE_NAMING.md` 문서 뼈대 생성
@@ -142,7 +142,7 @@ infra/
 - [x] BE 전체 Gradle test 통과
 - [x] BE Docker image build 및 `prod` profile liveness 검증
 
-AWS에는 Terraform state S3 bucket만 적용했다. Network와 ECR을 포함한 나머지 리소스는 사용자 검토와 명시적 승인 전까지 적용하지 않는다.
+AWS에는 Terraform state S3, Network, ECR, Security Group, 커뮤니티 이미지 S3, RDS, Redis, DB/Redis 비밀번호용 SSM Parameter Store와 읽기 IAM 정책을 적용했다.
 
 ## 최근 변경 이력
 
@@ -227,6 +227,26 @@ Security Group과 Community Image S3 Terraform:
 - Security Group과 Community Image S3 AWS 적용 완료: 19개 생성, 변경 0, 삭제 0
 - 적용 후 재검증 plan 결과: 변경 사항 없음
 - BE의 기존 `.gitignore` 로컬 변경은 이 작업에서 수정하거나 커밋하지 않음
+
+RDS, Redis, Secrets Terraform:
+
+- `modules/rds`에 PostgreSQL 17.11, `db.t4g.micro`, gp3 20 GiB, Single-AZ DB instance 구성
+- RDS는 private data subnet과 기존 RDS security group을 사용하고 public access를 차단
+- RDS storage encryption, 7일 backup, 강제 TLS, 삭제 방지와 final snapshot 구성
+- `modules/redis`에 Redis 7.1, `cache.t4g.micro`, single-node replication group 구성
+- Redis는 private data subnet과 기존 Redis security group을 사용하고 TLS/AUTH 및 저장 데이터 암호화 활성화
+- `modules/secrets`에서 PostgreSQL과 Redis 비밀번호를 SSM SecureString으로 관리
+- Terraform 1.11 이상의 ephemeral resource와 write-only 속성을 사용해 비밀번호를 plan/state에 저장하지 않도록 구성
+- ECS task execution role에 추후 연결할 최소 권한 SSM 읽기 IAM policy 생성 코드 추가
+- PostgreSQL 17.11과 Redis 7.1 및 선택한 micro instance/node의 서울 리전 제공 여부 확인
+- `terraform fmt -check -recursive`, `terraform validate`, 원격 state 기준 `terraform plan` 통과
+- 적용 전 저장 plan 결과: 9개 생성, 변경 0, 삭제 0
+- RDS, Redis, Secrets AWS 적용 완료: 9개 생성, 변경 0, 삭제 0
+- RDS PostgreSQL 17.11 상태 `available`, private access, storage encryption, deletion protection 확인
+- ElastiCache Redis 상태 `available`, TLS required, AUTH, 저장 데이터 암호화 확인
+- DB/Redis SSM parameter가 `SecureString` version 1로 생성됐으며 값은 출력하지 않고 metadata만 검증
+- 적용 후 AWS가 `rds.force_ssl`의 apply method를 `pending-reboot`로 반환해 Terraform 코드도 동일하게 정합화
+- 정합화 후 재검증 plan 결과: 변경 사항 없음
 
 ## 현재 애플리케이션 상태
 
@@ -366,6 +386,8 @@ Terraform 1.10 이상의 S3 native lockfile을 사용한다. deprecated된 Dynam
 
 RDS는 public access를 차단하고 ECS security group에서만 5432 접근을 허용한다.
 
+초기 구성은 PostgreSQL 17.11, `db.t4g.micro`, gp3 20 GiB, Single-AZ다. storage encryption, 7일 backup, TLS 강제, deletion protection과 final snapshot을 사용한다. `vector` extension은 RDS 생성 후 SQL로 별도 활성화한다.
+
 ### `modules/redis`
 
 - ElastiCache subnet group
@@ -373,7 +395,7 @@ RDS는 public access를 차단하고 ECS security group에서만 5432 접근을 
 - `security-groups` 모듈에서 생성한 Redis security group 연결
 - encryption 설정
 
-Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 접근을 허용한다.
+Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 접근을 허용한다. 초기 구성은 Redis 7.1, `cache.t4g.micro` 단일 노드이며 TLS/AUTH와 저장 데이터 암호화를 활성화한다.
 
 ### `modules/s3-assets`
 
@@ -384,10 +406,11 @@ Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 �
 
 ### `modules/secrets`
 
-- SSM Parameter Store 값 관리 기준
-- ECS task secret 주입 연결
+- PostgreSQL 및 Redis 비밀번호를 SSM Parameter Store SecureString으로 생성
+- Terraform state에 값이 남지 않도록 ephemeral resource와 write-only 속성 사용
+- ECS task execution role에 연결할 해당 parameter 전용 읽기 IAM policy
 
-비밀값 자체를 Terraform 코드나 `tfvars`에 평문으로 커밋하지 않는다.
+비밀값 자체를 Terraform 코드나 `tfvars`에 평문으로 커밋하지 않는다. DB/Redis 비밀번호 회전 시 대응하는 version 변수를 증가시킨다. ECS task definition의 secret 주입과 IAM policy 연결은 `ecs-api` 모듈에서 수행한다.
 
 ### `modules/github-oidc`
 
@@ -428,9 +451,10 @@ Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 �
 
 ### 5. 백엔드 데이터 및 실행 환경
 
-- [ ] RDS module
-- [ ] Redis module
-- [ ] secrets module
+- [x] RDS module 작성 및 plan 검증
+- [x] Redis module 작성 및 plan 검증
+- [x] secrets module 작성 및 plan 검증
+- [x] RDS, Redis, secrets AWS 적용 및 상태 검증
 - [ ] ALB module
 - [ ] ECS API module
 
@@ -459,6 +483,6 @@ Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 �
 
 ## 현재 다음 작업
 
-다음 작업은 RDS와 Redis 모듈을 작성하고 `terraform validate`와 `terraform plan` 결과를 사용자에게 검토받는 것이다. 명시적 승인 전에는 해당 리소스를 AWS에 apply하지 않는다.
+다음 작업은 ALB와 ECS API 모듈을 작성하는 것이다. ECS task/execution role에 기존 S3 객체 접근 정책과 SSM 읽기 정책을 각각 연결하고, RDS/Redis endpoint 및 SSM secret을 task definition에 주입한다. ECS 배포 전에 RDS의 `vector` extension 생성 절차도 함께 마련한다.
 
 배포 계약의 `제안` 및 `미정` 항목은 BE/FE 담당자의 확인이 필요하다. ECS API를 2개 이상 실행하면 기존 scheduler가 중복 실행될 수 있으므로 초기 desired count는 1로 유지한다.

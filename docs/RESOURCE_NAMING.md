@@ -165,6 +165,7 @@ endpoint, port처럼 Terraform output으로 ECS에 직접 전달할 수 있는 �
 | BE deploy role | `illowa-jeolla-main-be-deploy-role` |
 | Terraform plan role | `illowa-jeolla-main-tf-plan-role` |
 | Terraform apply role | `illowa-jeolla-main-tf-apply-role` |
+| ECS secret read policy | `illowa-jeolla-main-ecs-secrets-policy` |
 
 AWS account 단위 GitHub OIDC provider는 중복 생성하지 않는다. IAM trust policy는 AWS에 배포하는 `illowa-jeolla/BE`와 `illowa-jeolla/infra`의 필요한 브랜치와 workflow만 허용한다. FE의 Vercel 배포에는 AWS IAM role을 부여하지 않는다.
 
