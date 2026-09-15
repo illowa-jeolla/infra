@@ -100,7 +100,7 @@ Security group은 `modules/security-groups`에서 함께 생성해 ALB, ECS, RDS
 | Application Load Balancer | `illowa-jeolla-main-alb` |
 | Target group | `illowa-jeolla-main-api-tg` |
 
-별도 Batch Worker ECS Service와 SQS/DLQ는 만들지 않는다. API의 초기 desired count는 1이다.
+별도 Batch Worker ECS Service와 SQS/DLQ는 만들지 않는다. ALB/ECS 기반만 먼저 적용할 때는 API desired count를 0으로 두고, 운영 URL과 필수 secret을 모두 주입한 첫 실행부터 desired count를 1로 유지한다.
 
 CloudWatch log group:
 

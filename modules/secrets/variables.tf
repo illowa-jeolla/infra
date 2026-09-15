@@ -35,6 +35,12 @@ variable "redis_auth_token_version" {
   }
 }
 
+variable "additional_parameter_arns" {
+  description = "Additional user-managed SSM parameter ARNs that ECS may read."
+  type        = set(string)
+  default     = []
+}
+
 variable "tags" {
   description = "Additional tags applied to the SSM parameters."
   type        = map(string)

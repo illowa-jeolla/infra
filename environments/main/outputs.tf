@@ -107,3 +107,68 @@ output "redis_primary_endpoint_address" {
   description = "Primary DNS address used by the API to connect to Redis."
   value       = module.redis.primary_endpoint_address
 }
+
+output "alb_dns_name" {
+  description = "Public DNS name of the Application Load Balancer."
+  value       = module.alb.dns_name
+}
+
+output "api_certificate_arn" {
+  description = "ARN of the ACM certificate currently attached to the ALB."
+  value       = module.acm.certificate_arns[var.api_domain_name]
+}
+
+output "api_certificate_status" {
+  description = "Status of the ACM certificate currently attached to the ALB."
+  value       = module.acm.statuses[var.api_domain_name]
+}
+
+output "api_certificate_statuses" {
+  description = "Statuses of all ACM certificates keyed by domain name."
+  value       = module.acm.statuses
+}
+
+output "api_certificate_dns_validation_records" {
+  description = "CNAME records to add at the external DNS provider for ACM validation."
+  value       = module.acm.dns_validation_records
+}
+
+output "alb_zone_id" {
+  description = "Route 53 hosted zone ID of the Application Load Balancer."
+  value       = module.alb.zone_id
+}
+
+output "api_url" {
+  description = "Public HTTPS URL of the backend API."
+  value       = "https://${var.api_domain_name}"
+}
+
+output "ecs_cluster_name" {
+  description = "Name of the ECS API cluster."
+  value       = module.ecs_api.cluster_name
+}
+
+output "ecs_service_name" {
+  description = "Name of the ECS API service."
+  value       = module.ecs_api.service_name
+}
+
+output "ecs_task_definition_arn" {
+  description = "ARN of the ECS API task definition revision."
+  value       = module.ecs_api.task_definition_arn
+}
+
+output "ecs_execution_role_arn" {
+  description = "ARN of the ECS task execution role."
+  value       = module.ecs_api.execution_role_arn
+}
+
+output "ecs_task_role_arn" {
+  description = "ARN of the ECS API application task role."
+  value       = module.ecs_api.task_role_arn
+}
+
+output "api_log_group_name" {
+  description = "CloudWatch log group for the API container."
+  value       = module.ecs_api.log_group_name
+}

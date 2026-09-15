@@ -57,10 +57,13 @@ data "aws_iam_policy_document" "ecs_secret_read" {
       "ssm:GetParameter",
       "ssm:GetParameters",
     ]
-    resources = [
-      aws_ssm_parameter.postgres_password.arn,
-      aws_ssm_parameter.redis_auth_token.arn,
-    ]
+    resources = concat(
+      [
+        aws_ssm_parameter.postgres_password.arn,
+        aws_ssm_parameter.redis_auth_token.arn,
+      ],
+      sort(tolist(var.additional_parameter_arns)),
+    )
   }
 }
 

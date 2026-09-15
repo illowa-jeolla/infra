@@ -248,6 +248,69 @@ RDS, Redis, Secrets Terraform:
 - 적용 후 AWS가 `rds.force_ssl`의 apply method를 `pending-reboot`로 반환해 Terraform 코드도 동일하게 정합화
 - 정합화 후 재검증 plan 결과: 변경 사항 없음
 
+BE ECR image:
+
+- BE `chore/aws-deployment-prep`의 commit `225fca632481` 기준 전체 Gradle test 통과
+- Apple Silicon에서 ECS `X86_64` runtime에 맞춰 `linux/amd64` image로 교차 빌드
+- ECR `illowa-jeolla-main-api:225fca632481` push 완료
+- image digest `sha256:ae893108e82ea8ddba601aab259f10f227995f59eb216d4cf694c7faa0f9729e` 확인
+- 원격 image의 `linux/amd64`, 비루트 `spring:spring`, port `8080`, Java entrypoint 확인
+- ECR basic scan 완료: Critical 0, High 0, Medium 10, Low 3
+- 탐지 항목은 Ubuntu Jammy 기반 `glibc`, `libc`, `perl` 계열 4개 CVE가 중복 package 단위로 집계된 결과이며 ECS 배포 전 기록
+
+ALB와 ECS API Terraform:
+
+- `modules/alb`에 internet-facing ALB, `ip` target group, HTTP/선택적 HTTPS listener 구성
+- `/actuator/health/liveness`를 30초 interval, 5초 timeout, healthy 2회, unhealthy 3회로 구성
+- ACM certificate가 없으면 HTTP forward, 설정하면 HTTP에서 HTTPS redirect 및 TLS 1.2 이상 HTTPS listener 사용
+- `modules/ecs-api`에 ECS cluster, Fargate task definition, API service, CloudWatch log group 구성
+- task runtime은 Linux `X86_64`, 0.5 vCPU, 1 GiB, image tag `225fca632481`로 구성
+- ECR pull과 CloudWatch Logs 권한은 task execution role에 연결
+- 기존 SSM 읽기 정책은 task execution role, community image S3 정책은 application task role에 연결
+- RDS/Redis endpoint 및 DB/Redis SSM secret을 task definition에 연결
+- scheduler 중복 방지를 위해 desired count 입력을 0 또는 1로 제한
+- 운영 FE URL과 OAuth/JWT 값이 없으므로 초기 desired count는 0으로 설정
+- 필수 일반 환경변수와 secret ARN 없이 desired count를 1로 올리는 plan 차단 동작 검증
+- `terraform fmt`, `terraform validate`, 원격 state 기준 `terraform plan` 통과
+- 적용 전 plan 결과: 12개 생성, 변경 0, 삭제 0
+- ALB와 ECS 기반 AWS 적용 완료: 12개 생성, 변경 0, 삭제 0
+- ALB 상태 `active`, ECS Service 상태 `ACTIVE`, desired/running/pending count `0/0/0` 확인
+- 적용 후 재검증 plan 결과: 변경 사항 없음
+- ALB DNS `illowa-jeolla-main-alb-778055198.ap-northeast-2.elb.amazonaws.com` 생성
+
+ACM 인증서 준비:
+
+- 보유 도메인 `cltrmp.cloud`의 백엔드 전용 주소를 `api.cltrmp.cloud`로 확정
+- DNS는 가비아 네임서버에서 관리하며 `api` 레코드는 아직 미사용 상태임을 확인
+- 외부 DNS에서 수동 검증할 ACM 인증서 요청용 `modules/acm` 추가
+- 인증서가 발급되기 전에는 ALB HTTPS listener에 연결하지 않도록 요청과 연결 단계를 분리
+- ACM 인증서 요청 AWS 적용 완료: 1개 생성, 변경 0, 삭제 0
+- 가비아에 ACM DNS 검증 CNAME과 `api`에서 ALB로 향하는 CNAME 등록 완료
+- 외부 DNS 조회로 두 CNAME의 전파를 확인하고 ACM 검증 `SUCCESS`, 인증서 상태 `ISSUED` 확인
+- 발급된 인증서를 ALB 443 HTTPS listener에 연결하고 기존 HTTP listener를 HTTPS redirect로 전환
+- ALB HTTPS 적용 결과: 1개 생성, 1개 변경, 삭제 0
+- `http://api.cltrmp.cloud` 요청의 HTTPS `301` redirect 확인
+- `https://api.cltrmp.cloud` 인증서 검증 성공 및 TLS 검증 결과 `0` 확인
+- ECS desired count가 0이므로 HTTPS health 요청이 예상대로 `503`을 반환함
+- ALB 의존성이 ECS IAM 전체에 전파되던 module-level 의존성을 제거하고 target group output에 listener 의존성을 한정
+- Provider 경고를 제거하기 위해 HTTP listener의 forward/redirect action을 동적 블록으로 분리
+- 최종 재검증 plan 결과: 변경 사항 없음
+
+최종 도메인 전환 준비:
+
+- 최종 서비스 도메인을 `illowa-jeolla.cloud`, 백엔드 주소를 `api.illowa-jeolla.cloud`로 확정
+- 기존 `api.cltrmp.cloud` HTTPS 연결을 유지한 채 새 인증서를 병렬 발급하도록 ACM 모듈을 다중 인증서 구조로 확장
+- 새 인증서 DNS 검증 전에는 ALB의 활성 인증서와 운영 URL을 변경하지 않음
+- `api.illowa-jeolla.cloud` ACM 인증서 요청 AWS 적용 완료: 1개 생성, 변경 0, 삭제 0
+- 기존 `api.cltrmp.cloud` 인증서와 ALB HTTPS listener는 그대로 유지
+- 새 인증서 상태는 `PENDING_VALIDATION`이며 새 도메인의 DNS에 ACM 검증 CNAME을 등록해야 함
+- `api.illowa-jeolla.cloud`의 ACM 검증 CNAME과 ALB CNAME 등록 및 외부 DNS 전파 확인
+- 새 ACM 인증서의 도메인 검증 `SUCCESS`, 인증서 상태 `ISSUED` 확인
+- ALB의 활성 인증서를 새 도메인 인증서로 교체하되 기존 `api.cltrmp.cloud` 인증서는 롤백용으로 유지
+- ALB 443 listener 인증서 교체 적용 완료: 생성 0, 변경 1, 삭제 0
+- `http://api.illowa-jeolla.cloud`의 HTTPS `301` redirect와 새 도메인 TLS 검증 성공 확인
+- ECS desired count가 0이므로 HTTPS health 요청은 예상대로 `503`이며 최종 Terraform plan은 변경 사항 없음
+
 ## 현재 애플리케이션 상태
 
 ### BE
@@ -455,8 +518,8 @@ Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 �
 - [x] Redis module 작성 및 plan 검증
 - [x] secrets module 작성 및 plan 검증
 - [x] RDS, Redis, secrets AWS 적용 및 상태 검증
-- [ ] ALB module
-- [ ] ECS API module
+- [x] ALB module 작성 및 plan 검증
+- [x] ECS API module 작성 및 plan 검증
 
 ### 6. 수동 통합 배포
 
@@ -483,6 +546,6 @@ Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 �
 
 ## 현재 다음 작업
 
-다음 작업은 ALB와 ECS API 모듈을 작성하는 것이다. ECS task/execution role에 기존 S3 객체 접근 정책과 SSM 읽기 정책을 각각 연결하고, RDS/Redis endpoint 및 SSM secret을 task definition에 주입한다. ECS 배포 전에 RDS의 `vector` extension 생성 절차도 함께 마련한다.
+다음 작업은 확정된 Vercel origin과 OAuth callback을 ECS 환경변수에 반영하고 JWT/OAuth/API secret을 SSM Parameter Store에 등록하는 것이다. 이후 RDS의 `vector` extension을 생성한 뒤 desired count를 1로 올린다.
 
 배포 계약의 `제안` 및 `미정` 항목은 BE/FE 담당자의 확인이 필요하다. ECS API를 2개 이상 실행하면 기존 scheduler가 중복 실행될 수 있으므로 초기 desired count는 1로 유지한다.
