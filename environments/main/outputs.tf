@@ -32,3 +32,38 @@ output "ecr_repository_url" {
   description = "URL of the API ECR repository."
   value       = module.ecr.repository_url
 }
+
+output "alb_security_group_id" {
+  description = "ID of the ALB security group."
+  value       = module.security_groups.alb_security_group_id
+}
+
+output "ecs_api_security_group_id" {
+  description = "ID of the ECS API task security group."
+  value       = module.security_groups.ecs_api_security_group_id
+}
+
+output "rds_security_group_id" {
+  description = "ID of the RDS security group."
+  value       = module.security_groups.rds_security_group_id
+}
+
+output "redis_security_group_id" {
+  description = "ID of the Redis security group."
+  value       = module.security_groups.redis_security_group_id
+}
+
+output "community_image_bucket_name" {
+  description = "Name of the private community image bucket."
+  value       = module.s3_assets.bucket_name
+}
+
+output "community_image_bucket_arn" {
+  description = "ARN of the private community image bucket."
+  value       = module.s3_assets.bucket_arn
+}
+
+output "community_image_api_access_policy_arn" {
+  description = "ARN of the community image object access policy for the ECS API task role."
+  value       = module.s3_assets.api_access_policy_arn
+}
