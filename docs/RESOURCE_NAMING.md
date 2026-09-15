@@ -1,6 +1,6 @@
 # Resource Naming
 
-최종 갱신일: 2026-09-14
+최종 갱신일: 2026-09-15
 
 이 문서는 `illowa-jeolla` AWS 인프라의 리소스 이름과 공통 태그를 정의한다. 현재 Terraform 환경은 `main` 하나만 사용하며, 이 문서의 이름을 Terraform 구현의 기준으로 삼는다.
 
@@ -64,6 +64,16 @@ Name = illowa-jeolla-main-<resource-purpose>
 | Private data route table | `illowa-jeolla-main-data-rt` |
 
 `a`, `c`는 기본 AZ 구분자다. 실제 Terraform에서는 선택한 AZ 목록의 순서와 subnet 이름이 일치해야 한다.
+
+초기 네트워크 CIDR은 다음 값을 사용한다.
+
+| 구분 | A (`ap-northeast-2a`) | C (`ap-northeast-2c`) |
+| --- | --- | --- |
+| Public | `10.0.0.0/24` | `10.0.1.0/24` |
+| Private app | `10.0.10.0/24` | `10.0.11.0/24` |
+| Private data | `10.0.20.0/24` | `10.0.21.0/24` |
+
+VPC CIDR은 `10.0.0.0/16`이다. Private app subnet은 단일 NAT Gateway를 통해 외부로 나가며, Private data subnet에는 인터넷 기본 경로를 만들지 않는다.
 
 ## 5. Security groups
 
