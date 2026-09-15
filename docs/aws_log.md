@@ -142,7 +142,7 @@ infra/
 - [x] BE 전체 Gradle test 통과
 - [x] BE Docker image build 및 `prod` profile liveness 검증
 
-AWS에는 아직 리소스를 적용하지 않았다. Terraform resource 정의는 remote state bootstrap부터 작성하기 시작했다.
+AWS에는 Terraform state S3 bucket만 적용했다. Network와 ECR을 포함한 나머지 리소스는 사용자 검토와 명시적 승인 전까지 적용하지 않는다.
 
 ## 최근 변경 이력
 
@@ -188,6 +188,28 @@ BE 배포 준비:
 - pull 이전에 생성돼 있던 `postgres:17-alpine` 로컬 컨테이너를 최신 Compose 정의인 `pgvector/pgvector:pg17`로 재생성했으며 기존 volume은 유지
 - pgvector extension `0.8.6`과 `ai_tour_place_candidates`, `ai_job_candidates` 테이블 생성 확인
 - smoke test용 API 컨테이너는 검증 후 삭제
+
+### 2026-09-15
+
+Network와 ECR Terraform:
+
+- `modules/network` 구현
+- VPC CIDR을 `10.0.0.0/16`으로 설정
+- `ap-northeast-2a`, `ap-northeast-2c`에 public, private app, private data subnet을 각각 구성
+- private app subnet은 단일 NAT Gateway를 공유하도록 구성
+- private data subnet은 인터넷 기본 경로 없이 격리
+- `modules/ecr`에 immutable tag, AES256 암호화, push scan, lifecycle policy 구성
+- untagged image는 7일 후 정리하고 전체 image는 최근 30개를 유지
+- `environments/main`에 AWS Provider, 공통 태그, Network/ECR module, 변수 및 output 연결
+- main 환경용 `.terraform.lock.hcl` 생성
+
+검증:
+
+- `terraform fmt -check -recursive` 통과
+- `terraform validate` 통과
+- 원격 S3 state 기준 `terraform plan` 통과
+- plan 결과: 23개 생성, 변경 0, 삭제 0
+- Network와 ECR은 아직 AWS에 적용하지 않음
 - BE의 기존 `.gitignore` 로컬 변경은 이 작업에서 수정하거나 커밋하지 않음
 
 ## 현재 애플리케이션 상태
@@ -366,9 +388,9 @@ Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 �
 
 - [x] remote state bootstrap 코드 작성
 - [x] remote state bootstrap AWS 적용 및 보안 설정 검증
-- [ ] network module
-- [ ] ECR module
-- [ ] `environments/main` provider/backend/module wiring
+- [x] network module
+- [x] ECR module
+- [x] `environments/main` provider/backend/module wiring
 
 ### 4. Asset 및 Vercel 연동
 
@@ -410,6 +432,8 @@ Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 �
 
 ## 현재 다음 작업
 
-다음 작업은 network와 ECR module 코드를 작성하고 `terraform validate`와 `terraform plan` 결과를 사용자에게 검토받는 것이다. 명시적 승인 전에는 해당 리소스를 AWS에 apply하지 않는다.
+다음 작업은 Network와 ECR plan 결과를 사용자에게 검토받는 것이다. 명시적 승인 후에만 23개 리소스를 apply하며, 승인 전에는 AWS에 생성하지 않는다.
+
+Network와 ECR 적용이 완료되면 커뮤니티 이미지 private S3, RDS, Redis 모듈 순서로 진행한다.
 
 배포 계약의 `제안` 및 `미정` 항목은 BE/FE 담당자의 확인이 필요하다. ECS API를 2개 이상 실행하면 기존 scheduler가 중복 실행될 수 있으므로 초기 desired count는 1로 유지한다.

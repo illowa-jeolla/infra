@@ -63,3 +63,18 @@ S3는 Terraform remote state와 커뮤니티 이미지 저장에만 사용합니
 - `terraform apply` 전에는 항상 `terraform plan` 결과를 검토합니다.
 
 초기 인프라 반영은 merge 자동 실행이 아니라 수동 실행을 기준으로 합니다.
+
+## Main 환경 검증
+
+최초 초기화 시 bootstrap으로 생성한 state bucket 이름을 전달합니다.
+
+```bash
+cd environments/main
+terraform init -reconfigure \
+  -backend-config="bucket=illowa-jeolla-tfstate-862138198898"
+terraform fmt -check -recursive ../..
+terraform validate
+terraform plan
+```
+
+현재 main 환경은 Network와 ECR 모듈을 연결합니다. `terraform plan` 결과를 검토하고 명시적으로 승인하기 전에는 `terraform apply`를 실행하지 않습니다.
