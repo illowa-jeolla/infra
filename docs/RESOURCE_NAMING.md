@@ -86,6 +86,8 @@ VPC CIDR은 `10.0.0.0/16`이다. Private app subnet은 단일 NAT Gateway를 통
 
 Security group rule의 `description`에는 허용 주체와 포트를 함께 적는다. 예: `Allow API tasks to PostgreSQL 5432`.
 
+Security group은 `modules/security-groups`에서 함께 생성해 ALB, ECS, RDS, Redis 모듈 사이의 순환 의존성을 방지한다.
+
 ## 6. Container and load balancing
 
 | 리소스 | 이름 |
@@ -125,6 +127,7 @@ PostgreSQL database 이름은 하이픈 없이 `illowajeolla`를 사용한다. D
 | 대상 | 이름 |
 | --- | --- |
 | Community image bucket | `illowa-jeolla-main-assets-<aws-account-id>` |
+| API asset access policy | `illowa-jeolla-main-assets-access-policy` |
 
 S3 bucket의 `<aws-account-id>`는 실제 12자리 AWS account ID로 치환한다. Community image bucket은 `modules/s3-assets`에서 생성한다. FE는 Vercel에서 배포하므로 FE bucket, CloudFront distribution, OAC는 만들지 않는다.
 

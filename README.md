@@ -40,6 +40,7 @@ infra
 │   └── main
 ├── modules
 │   ├── network
+│   ├── security-groups
 │   ├── s3-assets
 │   ├── ecr
 │   ├── alb

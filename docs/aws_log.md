@@ -208,8 +208,24 @@ Network와 ECR Terraform:
 - `terraform fmt -check -recursive` 통과
 - `terraform validate` 통과
 - 원격 S3 state 기준 `terraform plan` 통과
-- plan 결과: 23개 생성, 변경 0, 삭제 0
-- Network와 ECR은 아직 AWS에 적용하지 않음
+- 적용 전 plan 결과: 23개 생성, 변경 0, 삭제 0
+- Network와 ECR AWS 적용 완료: 23개 생성, 변경 0, 삭제 0
+- 적용 후 재검증 plan 결과: 변경 사항 없음
+
+Security Group과 Community Image S3 Terraform:
+
+- ALB, ECS API, RDS, Redis security group을 `modules/security-groups`로 분리
+- ALB는 public HTTP `80`, HTTPS `443`만 허용
+- ECS API `8080`, RDS `5432`, Redis `6379`는 security group 참조로만 연결
+- ECS API는 외부 API와 AWS 서비스 호출을 위해 outbound 허용
+- 커뮤니티 이미지 private S3 bucket, public access block, BucketOwnerEnforced, AES256 암호화, versioning 구성
+- 미완료 multipart upload는 7일 후 정리하고 noncurrent object version은 30일 후 정리
+- 비보안 HTTP 요청을 거부하는 bucket policy 구성
+- ECS API task role에 연결할 S3 object 읽기/쓰기/삭제 IAM policy 구성
+- `terraform fmt -check -recursive`와 `terraform validate` 통과
+- 적용 전 plan 결과: 19개 생성, 변경 0, 삭제 0
+- Security Group과 Community Image S3 AWS 적용 완료: 19개 생성, 변경 0, 삭제 0
+- 적용 후 재검증 plan 결과: 변경 사항 없음
 - BE의 기존 `.gitignore` 로컬 변경은 이 작업에서 수정하거나 커밋하지 않음
 
 ## 현재 애플리케이션 상태
@@ -314,12 +330,22 @@ Terraform 1.10 이상의 S3 native lockfile을 사용한다. deprecated된 Dynam
 - image scan on push
 - lifecycle policy
 
+### `modules/security-groups`
+
+- ALB public HTTP/HTTPS ingress
+- ALB에서 ECS API `8080` 접근
+- ECS API에서 외부 API 및 AWS 서비스 접근
+- ECS API에서 RDS `5432` 접근
+- ECS API에서 Redis `6379` 접근
+
+보안 그룹을 별도 모듈에서 생성해 ALB, ECS, RDS, Redis 사이의 순환 의존성을 방지한다.
+
 ### `modules/alb`
 
 - Application Load Balancer
 - listener
 - target group
-- ALB security group
+- `security-groups` 모듈에서 생성한 ALB security group 연결
 
 ### `modules/ecs-api`
 
@@ -328,12 +354,13 @@ Terraform 1.10 이상의 S3 native lockfile을 사용한다. deprecated된 Dynam
 - task execution role 및 task role
 - CloudWatch log group
 - ALB target group 연결
+- `security-groups` 모듈에서 생성한 ECS API security group 연결
 
 ### `modules/rds`
 
 - PostgreSQL DB instance
 - DB subnet group
-- security group
+- `security-groups` 모듈에서 생성한 RDS security group 연결
 - parameter group
 - backup policy
 
@@ -343,7 +370,7 @@ RDS는 public access를 차단하고 ECS security group에서만 5432 접근을 
 
 - ElastiCache subnet group
 - Redis node 또는 replication group
-- security group
+- `security-groups` 모듈에서 생성한 Redis security group 연결
 - encryption 설정
 
 Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 접근을 허용한다.
@@ -352,7 +379,7 @@ Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 �
 
 - 커뮤니티 이미지 전용 private S3 bucket
 - public access block 및 server-side encryption
-- API task role의 object 읽기/쓰기/삭제 권한
+- API task role에 연결할 object 읽기/쓰기/삭제 IAM policy
 - 필요 시 CORS 및 lifecycle policy
 
 ### `modules/secrets`
@@ -394,7 +421,7 @@ Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 �
 
 ### 4. Asset 및 Vercel 연동
 
-- [ ] 커뮤니티 이미지 S3 module
+- [x] 커뮤니티 이미지 S3 module
 - [ ] BE HTTPS URL을 Vercel 환경변수에 반영
 - [ ] Vercel production origin을 BE CORS/OAuth 설정에 반영
 - [ ] FE Vercel 통합 검증
@@ -432,8 +459,6 @@ Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 �
 
 ## 현재 다음 작업
 
-다음 작업은 Network와 ECR plan 결과를 사용자에게 검토받는 것이다. 명시적 승인 후에만 23개 리소스를 apply하며, 승인 전에는 AWS에 생성하지 않는다.
-
-Network와 ECR 적용이 완료되면 커뮤니티 이미지 private S3, RDS, Redis 모듈 순서로 진행한다.
+다음 작업은 RDS와 Redis 모듈을 작성하고 `terraform validate`와 `terraform plan` 결과를 사용자에게 검토받는 것이다. 명시적 승인 전에는 해당 리소스를 AWS에 apply하지 않는다.
 
 배포 계약의 `제안` 및 `미정` 항목은 BE/FE 담당자의 확인이 필요하다. ECS API를 2개 이상 실행하면 기존 scheduler가 중복 실행될 수 있으므로 초기 desired count는 1로 유지한다.
