@@ -4,17 +4,18 @@ illowa-jeolla 프로젝트의 AWS 인프라 설계 문서와 Terraform IaC를 �
 
 ## 목적
 
-이 저장소는 FE/BE 애플리케이션 코드와 AWS 인프라 코드를 분리해서 관리하기 위한 공간입니다.
+이 저장소는 BE 애플리케이션의 AWS 인프라와 Terraform state 기반을 관리하기 위한 공간입니다. FE React/Vite 앱은 Vercel에서 별도로 배포합니다.
 
 최종 배포 구조는 아래 방향을 기준으로 합니다.
 
 ```text
-FE: React/Vite 정적 빌드 -> S3 + CloudFront
+FE: React/Vite -> Vercel (AWS 관리 범위 밖)
 BE: Spring Boot Docker image -> ECR -> ECS Fargate
 DB: PostgreSQL -> RDS
 Cache/Token State: Redis -> ElastiCache
 Ingress: ALB
-Secret: Secrets Manager 또는 SSM Parameter Store
+Asset: Community image -> private S3
+Secret: SSM Parameter Store
 Logs: CloudWatch
 IaC: Terraform HCL
 ```
@@ -23,8 +24,11 @@ IaC: Terraform HCL
 
 - `docs/AWS_DEPLOYMENT_STRATEGY.md`: 최종 AWS 배포 전략
 - `docs/aws-kiro.md`: Kiro steering/hook을 활용한 Terraform IaC 작성 및 검증 전략
+- `docs/DEPLOYMENT_CONTRACT.md`: Vercel FE와 AWS BE 사이의 배포 계약
+- `docs/RESOURCE_NAMING.md`: AWS 리소스 이름과 태그 기준
+- `docs/aws_log.md`: 결정 및 작업 이력
 
-## 예정 구조
+## 구조
 
 ```text
 infra
@@ -33,22 +37,21 @@ infra
 ├── bootstrap
 │   └── remote-state
 ├── environments
-│   ├── dev
-│   └── prod
+│   └── main
 ├── modules
 │   ├── network
-│   ├── s3-cloudfront
+│   ├── s3-assets
 │   ├── ecr
 │   ├── alb
-│   ├── ecs
+│   ├── ecs-api
 │   ├── rds
 │   ├── redis
 │   ├── secrets
-│   └── iam-github-oidc
-└── .kiro
-    ├── steering
-    └── hooks
+│   └── github-oidc
+└── docs
 ```
+
+S3는 Terraform remote state와 커뮤니티 이미지 저장에만 사용합니다. FE 정적 호스팅용 S3와 CloudFront는 만들지 않습니다.
 
 ## 기본 규칙
 
