@@ -277,7 +277,7 @@ Task execution role:
 
 BE와 infra GitHub Actions는 장기 access key 대신 OIDC를 사용한다. FE 배포는 Vercel이 담당하며 AWS OIDC role을 사용하지 않는다.
 
-초기 ALB/ECS 기반 적용 시에는 아직 운영 FE URL과 OAuth/JWT secret이 확정되지 않았으므로 ECS Service의 desired count를 0으로 유지한다. Terraform은 필수 일반 환경변수와 SSM secret ARN이 모두 설정되지 않은 상태에서 desired count를 1로 올리는 plan을 차단한다.
+초기 ALB/ECS 기반은 desired count 0으로 적용했다. 운영 FE URL과 OAuth/JWT/API secret을 확정하고 SSM 연결 및 RDS `vector` extension 생성을 완료한 뒤 ECS Service의 desired count를 1로 전환했다. Terraform은 필수 일반 환경변수와 SSM secret ARN이 모두 설정되지 않은 상태에서 desired count를 1로 올리는 plan을 차단한다.
 
 ALB 80 listener는 HTTPS로 redirect하고 443 listener는 발급된 `api.illowa-jeolla.cloud` ACM certificate를 사용해 target group으로 전달한다.
 
@@ -292,14 +292,17 @@ ALB 80 listener는 HTTPS로 redirect하고 443 listener는 발급된 `api.illowa
 ## 13. 배포 차단 항목
 
 - [ ] 단일 API task에서 내부 비동기 처리 및 scheduler 동작 검증
-- [ ] RDS `vector` extension 생성 및 vector query 검증
+- [x] RDS `vector` extension 생성
+- [ ] RDS vector query 검증
 - [ ] ElastiCache TLS/AUTH 실제 연결 검증
 - [ ] DB migration 또는 `ddl-auto` 위험 수용 결정
 - [x] BE HTTPS API domain 및 ACM certificate 확정
 - [x] Vercel production origin 및 OAuth callback 확정
-- [ ] FE Vercel 환경변수와 SPA rewrite 적용
-- [ ] 생성된 S3 객체 접근 정책을 ECS API task role에 연결
-- [ ] 생성된 SSM 읽기 정책을 ECS API task execution role에 연결
+- [x] FE Vercel 환경변수와 SPA rewrite 적용
+- [x] 생성된 S3 객체 접근 정책을 ECS API task role에 연결
+- [x] 생성된 SSM 읽기 정책을 ECS API task execution role에 연결
+- [x] ECS API desired count 1 및 ALB health check 통과
+- [ ] Vercel custom domain HTTPS 및 Primary Domain 방향 검증
 
 ## 14. 담당자 확인 질문
 

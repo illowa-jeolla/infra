@@ -144,9 +144,9 @@ variable "api_task_memory" {
 }
 
 variable "api_desired_count" {
-  description = "API task count. Keep at zero until all production URLs and secrets are configured."
+  description = "API task count. Production keeps one task because schedulers run inside the API process."
   type        = number
-  default     = 0
+  default     = 1
 
   validation {
     condition     = var.api_desired_count >= 0 && var.api_desired_count <= 1
@@ -185,6 +185,15 @@ variable "api_required_environment_names" {
     "GOOGLE_REDIRECT_URI",
     "FRONTEND_OAUTH_CALLBACK_URI",
     "FRONTEND_ORIGIN",
+    "OPENAI_MODEL",
+    "OPENAI_EMBEDDING_MODEL",
+    "OPENAI_EMBEDDING_DIMENSIONS",
+    "AI_MATCH_REQUEST_TTL",
+    "AI_MATCH_DAILY_LIMIT",
+    "AI_MATCH_TOUR_PLACE_CRON",
+    "AI_MATCH_JUNNAM_JOB_CRON",
+    "AI_MATCH_TOUR_JOB_CRON",
+    "AI_MATCH_CLEANUP_CRON",
   ]
 }
 
@@ -197,5 +206,10 @@ variable "api_required_secret_names" {
     "JWT_SECRET",
     "KAKAO_CLIENT_SECRET",
     "GOOGLE_CLIENT_SECRET",
+    "KAKAO_MAP_REST_API_KEY",
+    "TOUR_INFO_KOREAN_API",
+    "TOUR_JOB_API_KEY",
+    "JUNNAM_PUBLIC_JOB_API",
+    "OPENAI_API_KEY",
   ]
 }
