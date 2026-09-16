@@ -172,3 +172,23 @@ output "api_log_group_name" {
   description = "CloudWatch log group for the API container."
   value       = module.ecs_api.log_group_name
 }
+
+output "github_oidc_provider_arn" {
+  description = "ARN of the account-level GitHub Actions OIDC provider."
+  value       = module.github_oidc.provider_arn
+}
+
+output "be_deploy_role_arn" {
+  description = "IAM role ARN used by the backend GitHub Actions deployment workflow."
+  value       = module.github_oidc.role_arn
+}
+
+output "be_deploy_policy_arn" {
+  description = "IAM policy ARN attached to the backend deployment role."
+  value       = module.github_oidc.policy_arn
+}
+
+output "be_deploy_trusted_subject" {
+  description = "GitHub OIDC subject allowed to assume the backend deployment role."
+  value       = module.github_oidc.trusted_subject
+}

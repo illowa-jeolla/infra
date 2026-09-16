@@ -142,7 +142,7 @@ infra/
 - [x] BE 전체 Gradle test 통과
 - [x] BE Docker image build 및 `prod` profile liveness 검증
 
-AWS에는 Terraform state S3, Network, ECR, Security Group, 커뮤니티 이미지 S3, RDS, Redis, DB/Redis 비밀번호용 SSM Parameter Store와 읽기 IAM 정책을 적용했다.
+AWS에는 Terraform state S3, Network, ECR, Security Group, 커뮤니티 이미지 S3, RDS, Redis, SSM Parameter Store, ALB/ECS API와 BE 배포용 GitHub OIDC/IAM Role을 적용했다.
 
 ## 최근 변경 이력
 
@@ -342,8 +342,18 @@ Vercel 연결 확인:
 - apex A record와 `www` CNAME의 공개 DNS 전파 확인
 - 배포 bundle에 `https://api.illowa-jeolla.cloud`와 CSRF response token 우선 사용 변경 반영 확인
 - Vercel 기본 배포 URL의 `/oauth/callback` deep link가 200을 반환해 SPA rewrite 적용 확인
-- custom domain HTTPS certificate는 아직 발급 대기
-- 현재 apex가 `www`로 redirect되므로 backend에 설정한 apex origin과 맞추기 위해 `illowa-jeolla.cloud`를 Vercel Primary Domain으로 변경해야 함
+- `illowa-jeolla.cloud`를 Vercel Production Primary Domain으로 설정
+- `www.illowa-jeolla.cloud`는 apex로 307 redirect하며 두 도메인 모두 Valid Configuration 및 자동 SSL/TLS 적용 확인
+
+GitHub OIDC와 BE 배포 권한:
+
+- 계정 단위 `token.actions.githubusercontent.com` GitHub OIDC Provider 생성
+- `illowa-jeolla-main-be-deploy-role`과 `illowa-jeolla-main-be-deploy-policy` 적용 완료
+- OIDC trust를 `repo:illowa-jeolla/BE:ref:refs/heads/main`, audience `sts.amazonaws.com`으로 제한
+- ECR `illowa-jeolla-main-api` image push, task definition 조회/등록, 대상 ECS service 조회/update, 지정된 두 ECS role의 PassRole만 허용
+- GitHub Actions가 배포한 task definition revision을 Terraform이 되돌리지 않도록 ECS service의 `task_definition` lifecycle ignore 적용
+- Terraform apply 결과: 4개 생성, 변경 0, 삭제 0
+- 적용 후 IAM trust/policy attachment를 AWS API로 검증하고 Terraform plan 변경 사항 없음 확인
 
 ## 현재 애플리케이션 상태
 
@@ -511,9 +521,9 @@ Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 �
 
 ### `modules/github-oidc`
 
-- GitHub OIDC provider
-- BE 배포 role
-- Terraform 실행 role
+- AWS 계정 단위 GitHub OIDC provider
+- `illowa-jeolla/BE`의 `main` ref만 신뢰하는 BE 배포 role
+- 대상 ECR repository와 ECS service로 제한한 최소 권한 배포 policy
 
 장기 AWS access key 대신 OIDC를 사용한다.
 
@@ -564,7 +574,7 @@ Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 �
 
 ### 7. CI/CD
 
-- [ ] GitHub OIDC module
+- [x] GitHub OIDC module
 - [ ] BE deploy workflow
 - [ ] Terraform plan/apply 정책
 
@@ -580,6 +590,6 @@ Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 �
 
 ## 현재 다음 작업
 
-다음 작업은 Vercel에서 `illowa-jeolla.cloud`를 Primary Domain으로 설정하고 custom domain HTTPS certificate 발급을 완료하는 것이다. 이후 FE에서 회원가입, 일반 로그인, OAuth, token refresh와 주요 API를 smoke test하고 scheduler 실행 결과를 확인한다.
+다음 작업은 BE 저장소에 `main` push와 수동 실행을 지원하는 GitHub Actions 배포 workflow를 작성하는 것이다. workflow는 Gradle test, `linux/amd64` image build, git SHA tag ECR push, task definition 새 revision 등록, ECS service 안정화 대기와 HTTPS liveness 확인 순으로 구성한다. 이후 FE에서 회원가입, 일반 로그인, OAuth, token refresh와 주요 API를 smoke test하고 scheduler 실행 결과를 확인한다.
 
 배포 계약의 `제안` 및 `미정` 항목은 BE/FE 담당자의 확인이 필요하다. ECS API를 2개 이상 실행하면 기존 scheduler가 중복 실행될 수 있으므로 초기 desired count는 1로 유지한다.

@@ -13,6 +13,11 @@ output "service_name" {
   value       = aws_ecs_service.api.name
 }
 
+output "service_arn" {
+  description = "ARN of the ECS API service."
+  value       = aws_ecs_service.api.id
+}
+
 output "task_definition_arn" {
   description = "ARN of the ECS API task definition revision."
   value       = aws_ecs_task_definition.api.arn

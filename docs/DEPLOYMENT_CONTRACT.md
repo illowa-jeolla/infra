@@ -1,6 +1,6 @@
 # Deployment Contract
 
-최종 갱신일: 2026-09-15
+최종 갱신일: 2026-09-16
 
 이 문서는 Vercel FE와 AWS에 배포하는 BE API가 함께 지켜야 할 계약을 정의한다.
 
@@ -275,7 +275,16 @@ Task execution role:
 - CloudWatch Logs write
 - task definition secret 조회
 
-BE와 infra GitHub Actions는 장기 access key 대신 OIDC를 사용한다. FE 배포는 Vercel이 담당하며 AWS OIDC role을 사용하지 않는다.
+BE GitHub Actions는 장기 access key 대신 계정 단위 GitHub OIDC Provider와 `illowa-jeolla-main-be-deploy-role`을 사용한다. Role의 OIDC subject는 `repo:illowa-jeolla/BE:ref:refs/heads/main`, audience는 `sts.amazonaws.com`으로 제한한다. FE 배포는 Vercel이 담당하며 AWS OIDC role을 사용하지 않는다.
+
+BE 배포 Role은 다음 작업만 허용한다.
+
+- `illowa-jeolla-main-api` ECR repository에 image push
+- 현재 ECS task definition 조회와 새 revision 등록
+- `illowa-jeolla-main-api-svc` ECS service 조회와 update
+- 지정된 ECS task execution role과 API task role을 `ecs-tasks.amazonaws.com`에 전달
+
+Terraform은 ECS task definition의 환경변수, secret, CPU/Memory와 최초 service 구성을 관리한다. BE GitHub Actions가 배포한 task definition revision을 이후 Terraform apply가 이전 revision으로 되돌리지 않도록 ECS service의 `task_definition` 변경은 lifecycle에서 무시한다.
 
 초기 ALB/ECS 기반은 desired count 0으로 적용했다. 운영 FE URL과 OAuth/JWT/API secret을 확정하고 SSM 연결 및 RDS `vector` extension 생성을 완료한 뒤 ECS Service의 desired count를 1로 전환했다. Terraform은 필수 일반 환경변수와 SSM secret ARN이 모두 설정되지 않은 상태에서 desired count를 1로 올리는 plan을 차단한다.
 
@@ -302,7 +311,7 @@ ALB 80 listener는 HTTPS로 redirect하고 443 listener는 발급된 `api.illowa
 - [x] 생성된 S3 객체 접근 정책을 ECS API task role에 연결
 - [x] 생성된 SSM 읽기 정책을 ECS API task execution role에 연결
 - [x] ECS API desired count 1 및 ALB health check 통과
-- [ ] Vercel custom domain HTTPS 및 Primary Domain 방향 검증
+- [x] Vercel custom domain HTTPS 및 Primary Domain 방향 검증
 
 ## 14. 담당자 확인 질문
 
