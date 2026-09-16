@@ -722,7 +722,9 @@ BE image tag는 `latest`만 쓰지 않고 git sha를 같이 사용한다.
 illowa-jeolla-main-api:<git-sha>
 ```
 
-AWS 인증은 가능하면 GitHub Actions OIDC + AWS IAM Role을 사용한다. 장기 AWS access key를 GitHub Secrets에 저장하는 방식은 초기에는 가능하지만 최종 운영 구조로는 덜 안전하다.
+AWS 인증은 GitHub Actions OIDC + AWS IAM Role을 사용한다. 적용된 BE deploy role은 `illowa-jeolla/BE`의 `main` ref만 신뢰하며, ECR image push와 대상 ECS service 배포에 필요한 최소 권한만 가진다. 장기 AWS access key는 GitHub Secrets에 저장하지 않는다.
+
+Terraform은 ECS task definition의 실행 설정을 관리하고, BE workflow는 현재 task definition을 바탕으로 image만 git SHA tag로 교체한 새 revision을 등록한다. GitHub Actions 배포 후 Terraform이 service를 이전 revision으로 되돌리지 않도록 ECS service의 `task_definition`은 Terraform lifecycle 변경 감지에서 제외한다.
 
 infra PR:
 
