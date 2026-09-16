@@ -44,25 +44,39 @@ api_certificate_domain_names = [
 api_image_tag          = "225fca632481"
 api_task_cpu           = 512
 api_task_memory        = 1024
-api_desired_count      = 0
+api_desired_count      = 1
 api_log_retention_days = 14
 
 # Configure these values before changing api_desired_count to 1.
 api_environment = {
-  # JWT_ACCESS_EXPIRATION       = "3600000"
-  # JWT_REFRESH_EXPIRATION      = "1209600000"
-  # JWT_COOKIE_SECURE           = "true"
-  # KAKAO_CLIENT_ID             = "non-secret-client-id"
-  # KAKAO_REDIRECT_URI          = "https://api.illowa-jeolla.cloud/api/v1/auth/kakao/callback"
-  # GOOGLE_CLIENT_ID            = "non-secret-client-id"
-  # GOOGLE_REDIRECT_URI         = "https://api.illowa-jeolla.cloud/api/v1/auth/google/callback"
-  # FRONTEND_OAUTH_CALLBACK_URI = "https://illowa-jeolla.cloud/oauth/callback"
-  # FRONTEND_ORIGIN             = "https://illowa-jeolla.cloud"
+  JWT_ACCESS_EXPIRATION       = "3600000"
+  JWT_REFRESH_EXPIRATION      = "1209600000"
+  JWT_COOKIE_SECURE           = "true"
+  KAKAO_CLIENT_ID             = "replace-with-kakao-client-id"
+  KAKAO_REDIRECT_URI          = "https://api.illowa-jeolla.cloud/api/v1/auth/kakao/callback"
+  GOOGLE_CLIENT_ID            = "replace-with-google-client-id"
+  GOOGLE_REDIRECT_URI         = "https://api.illowa-jeolla.cloud/api/v1/auth/google/callback"
+  FRONTEND_OAUTH_CALLBACK_URI = "https://illowa-jeolla.cloud/oauth/callback"
+  FRONTEND_ORIGIN             = "https://illowa-jeolla.cloud"
+  OPENAI_MODEL                = "gpt-5.6-luna"
+  OPENAI_EMBEDDING_MODEL      = "text-embedding-3-small"
+  OPENAI_EMBEDDING_DIMENSIONS = "1536"
+  AI_MATCH_REQUEST_TTL        = "1h"
+  AI_MATCH_DAILY_LIMIT        = "2"
+  AI_MATCH_TOUR_PLACE_CRON    = "0 0 2 * * *"
+  AI_MATCH_JUNNAM_JOB_CRON    = "0 30 2 * * *"
+  AI_MATCH_TOUR_JOB_CRON      = "0 0 3 * * *"
+  AI_MATCH_CLEANUP_CRON       = "0 30 3 * * SUN"
 }
 
 # Values are SSM parameter ARNs, not secret values.
 api_secret_parameter_arns = {
-  # JWT_SECRET           = "arn:aws:ssm:ap-northeast-2:123456789012:parameter/illowa-jeolla/main/jwt/secret"
-  # KAKAO_CLIENT_SECRET  = "arn:aws:ssm:ap-northeast-2:123456789012:parameter/illowa-jeolla/main/oauth/kakao/client-secret"
-  # GOOGLE_CLIENT_SECRET = "arn:aws:ssm:ap-northeast-2:123456789012:parameter/illowa-jeolla/main/oauth/google/client-secret"
+  JWT_SECRET              = "arn:aws:ssm:ap-northeast-2:123456789012:parameter/illowa-jeolla/main/jwt/secret"
+  KAKAO_CLIENT_SECRET     = "arn:aws:ssm:ap-northeast-2:123456789012:parameter/illowa-jeolla/main/oauth/kakao/client-secret"
+  GOOGLE_CLIENT_SECRET    = "arn:aws:ssm:ap-northeast-2:123456789012:parameter/illowa-jeolla/main/oauth/google/client-secret"
+  KAKAO_MAP_REST_API_KEY  = "arn:aws:ssm:ap-northeast-2:123456789012:parameter/illowa-jeolla/main/api/kakao-map-key"
+  TOUR_INFO_KOREAN_API    = "arn:aws:ssm:ap-northeast-2:123456789012:parameter/illowa-jeolla/main/api/tour-info-key"
+  TOUR_JOB_API_KEY        = "arn:aws:ssm:ap-northeast-2:123456789012:parameter/illowa-jeolla/main/api/tour-job-key"
+  JUNNAM_PUBLIC_JOB_API   = "arn:aws:ssm:ap-northeast-2:123456789012:parameter/illowa-jeolla/main/api/junnam-job-key"
+  OPENAI_API_KEY          = "arn:aws:ssm:ap-northeast-2:123456789012:parameter/illowa-jeolla/main/api/openai-key"
 }

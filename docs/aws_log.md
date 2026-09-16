@@ -311,6 +311,40 @@ ACM 인증서 준비:
 - `http://api.illowa-jeolla.cloud`의 HTTPS `301` redirect와 새 도메인 TLS 검증 성공 확인
 - ECS desired count가 0이므로 HTTPS health 요청은 예상대로 `503`이며 최종 Terraform plan은 변경 사항 없음
 
+### 2026-09-16
+
+운영 secret 및 ECS API 기동:
+
+- 사용자 제공 JWT/OAuth/API key 8개를 `/illowa-jeolla/main` 경로의 SSM Parameter Store `SecureString` Standard parameter로 등록하고 metadata 검증 완료
+- Terraform이 관리하는 DB/Redis password를 포함해 전체 10개 parameter가 `SecureString`임을 확인
+- 실제 secret 값은 Terraform 코드, `tfvars`, plan, state에 저장하지 않고 ECS task definition에는 parameter ARN만 연결
+- ECS task execution role의 SSM 읽기 정책에 JWT/OAuth/Kakao Map/관광/일자리/OpenAI parameter ARN 추가
+- 운영 FE origin, OAuth callback, JWT cookie, OpenAI embedding 및 AI match scheduler 일반 환경변수 반영
+- 누락된 API key와 AI match 설정이 있으면 desired count 1 plan을 차단하도록 필수값 검증 범위 확장
+- 일회성 Fargate task에서 `CREATE EXTENSION IF NOT EXISTS vector`를 실행하고 exit code 0 및 `CREATE EXTENSION` 로그 확인
+- 일회성 DB bootstrap task definition은 실행 후 `INACTIVE` 처리
+- 검증 plan 결과: task definition 교체 1, IAM policy/service 변경 2, 예상 밖 인프라 삭제 없음
+- ECS API desired count를 1로 적용하고 task definition revision 2 배포 완료
+- ECS Service desired/running/pending `1/1/0`, rollout `COMPLETED`, ALB target `healthy` 확인
+- `https://api.illowa-jeolla.cloud/actuator/health` 및 liveness HTTPS 200, TLS 검증 결과 0 확인
+- `https://illowa-jeolla.cloud` origin의 CORS preflight에 credentials 허용 및 정확한 origin 반환 확인
+- CSRF endpoint가 HTTPS 200, 운영 origin CORS header와 `Secure` XSRF cookie를 반환함을 확인
+- Kakao와 Google OAuth 시작 endpoint가 각 provider의 HTTPS 인증 주소로 302 redirect함을 확인
+- 누락된 문자로 인해 잘못 등록됐던 Kakao REST API key를 BE 로컬 환경, SSM Parameter Store, ECS 일반 환경변수에 동일하게 반영
+- ECS task definition revision 3으로 교체 배포하고 desired/running/pending `1/1/0`, rollout `COMPLETED`, ALB target `healthy` 확인
+- Kakao 인증 페이지 요청에서 `KOE101`이 더 이상 반환되지 않음을 확인
+- 인증되지 않은 보호 API 요청이 401을 반환함을 확인
+- CloudWatch에서 PostgreSQL connection pool 연결과 Spring Boot 시작 완료 로그 확인
+- 적용 후 Terraform plan 결과: 변경 사항 없음
+
+Vercel 연결 확인:
+
+- apex A record와 `www` CNAME의 공개 DNS 전파 확인
+- 배포 bundle에 `https://api.illowa-jeolla.cloud`와 CSRF response token 우선 사용 변경 반영 확인
+- Vercel 기본 배포 URL의 `/oauth/callback` deep link가 200을 반환해 SPA rewrite 적용 확인
+- custom domain HTTPS certificate는 아직 발급 대기
+- 현재 apex가 `www`로 redirect되므로 backend에 설정한 apex origin과 맞추기 위해 `illowa-jeolla.cloud`를 Vercel Primary Domain으로 변경해야 함
+
 ## 현재 애플리케이션 상태
 
 ### BE
@@ -348,10 +382,10 @@ ACM 인증서 준비:
 - [ ] 운영 DB migration 방식 확정
 - [x] Actuator와 liveness health endpoint 추가
 - [x] Redis TLS/AUTH 연결 설정 추가
-- [ ] 운영 환경변수 목록 확정
-- [ ] RDS에서 `vector` extension 생성 방식 확정
+- [x] 운영 환경변수 목록 확정
+- [x] RDS에서 `vector` extension 생성 방식 확정 및 실행
 - [ ] API task가 1개일 때 내부 `@Async`와 scheduler 동작 검증
-- [ ] 커뮤니티 이미지 전용 private S3 bucket과 API task IAM 권한 생성
+- [x] 커뮤니티 이미지 전용 private S3 bucket과 API task IAM 권한 생성
 - [x] 로컬 Docker image build 및 실행 검증
 
 2026-09-14 로컬 검증 결과:
@@ -508,8 +542,8 @@ Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 �
 ### 4. Asset 및 Vercel 연동
 
 - [x] 커뮤니티 이미지 S3 module
-- [ ] BE HTTPS URL을 Vercel 환경변수에 반영
-- [ ] Vercel production origin을 BE CORS/OAuth 설정에 반영
+- [x] BE HTTPS URL을 Vercel 환경변수에 반영
+- [x] Vercel production origin을 BE CORS/OAuth 설정에 반영
 - [ ] FE Vercel 통합 검증
 
 ### 5. 백엔드 데이터 및 실행 환경
@@ -523,8 +557,8 @@ Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 �
 
 ### 6. 수동 통합 배포
 
-- [ ] ECR image push
-- [ ] ECS API health check
+- [x] ECR image push
+- [x] ECS API health check
 - [ ] FE에서 BE API 호출
 - [ ] API 내부 비동기 처리 및 scheduler 동작 검증
 
@@ -538,14 +572,14 @@ Redis는 public subnet에 배치하지 않고 ECS security group에서만 6379 �
 
 - [ ] 로그인 및 OAuth
 - [ ] 주요 API smoke test
-- [ ] RDS 및 Redis 연결
+- [x] RDS 및 Redis 연결
 - [ ] 내부 비동기 처리 및 scheduler 실행 결과
-- [ ] CloudWatch Logs
-- [ ] CORS 및 cookie 설정
+- [x] CloudWatch Logs
+- [x] CORS 및 cookie 설정
 - [ ] 비용 확인
 
 ## 현재 다음 작업
 
-다음 작업은 확정된 Vercel origin과 OAuth callback을 ECS 환경변수에 반영하고 JWT/OAuth/API secret을 SSM Parameter Store에 등록하는 것이다. 이후 RDS의 `vector` extension을 생성한 뒤 desired count를 1로 올린다.
+다음 작업은 Vercel에서 `illowa-jeolla.cloud`를 Primary Domain으로 설정하고 custom domain HTTPS certificate 발급을 완료하는 것이다. 이후 FE에서 회원가입, 일반 로그인, OAuth, token refresh와 주요 API를 smoke test하고 scheduler 실행 결과를 확인한다.
 
 배포 계약의 `제안` 및 `미정` 항목은 BE/FE 담당자의 확인이 필요하다. ECS API를 2개 이상 실행하면 기존 scheduler가 중복 실행될 수 있으므로 초기 desired count는 1로 유지한다.

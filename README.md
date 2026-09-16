@@ -80,4 +80,4 @@ terraform validate
 terraform plan
 ```
 
-현재 main 환경에는 Network, ECR, Security Group, 커뮤니티 이미지 S3, RDS, Redis, DB/Redis 비밀번호용 SSM Parameter Store, ALB와 desired count 0의 ECS API 기반이 적용돼 있습니다. 최종 API 도메인은 `api.illowa-jeolla.cloud`이며 ACM 인증서와 외부 DNS 검증을 완료했습니다. 이후 인프라 변경도 `terraform plan` 검토와 명시적 승인 후 적용합니다.
+현재 main 환경에는 Network, ECR, Security Group, 커뮤니티 이미지 S3, RDS, Redis, SSM Parameter Store, ALB와 desired count 1의 ECS API가 적용돼 있습니다. RDS `vector` extension과 운영 환경변수/secret 연결을 완료했으며 `https://api.illowa-jeolla.cloud/actuator/health`가 200을 반환합니다. 이후 인프라 변경도 `terraform plan` 검토와 명시적 승인 후 적용합니다.
