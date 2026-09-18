@@ -1,6 +1,14 @@
 locals {
-  github_oidc_url = "https://token.actions.githubusercontent.com"
-  github_subject  = "repo:${var.github_repository}:ref:${var.github_ref}"
+  github_oidc_url         = "https://token.actions.githubusercontent.com"
+  github_repository_parts = split("/", var.github_repository)
+  github_subject = format(
+    "repo:%s@%s/%s@%s:ref:%s",
+    local.github_repository_parts[0],
+    var.github_repository_owner_id,
+    local.github_repository_parts[1],
+    var.github_repository_id,
+    var.github_ref,
+  )
 }
 
 resource "aws_iam_openid_connect_provider" "github" {

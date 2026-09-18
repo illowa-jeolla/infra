@@ -181,13 +181,15 @@ module "ecs_api" {
 module "github_oidc" {
   source = "../../modules/github-oidc"
 
-  role_name              = "${local.name_prefix}-be-deploy-role"
-  policy_name            = "${local.name_prefix}-be-deploy-policy"
-  github_repository      = "illowa-jeolla/BE"
-  github_ref             = "refs/heads/main"
-  ecr_repository_arn     = module.ecr.repository_arn
-  ecs_service_arn        = module.ecs_api.service_arn
-  ecs_execution_role_arn = module.ecs_api.execution_role_arn
-  ecs_task_role_arn      = module.ecs_api.task_role_arn
-  tags                   = local.common_tags
+  role_name                  = "${local.name_prefix}-be-deploy-role"
+  policy_name                = "${local.name_prefix}-be-deploy-policy"
+  github_repository          = "illowa-jeolla/BE"
+  github_repository_owner_id = "310118295"
+  github_repository_id       = "1314840737"
+  github_ref                 = "refs/heads/main"
+  ecr_repository_arn         = module.ecr.repository_arn
+  ecs_service_arn            = module.ecs_api.service_arn
+  ecs_execution_role_arn     = module.ecs_api.execution_role_arn
+  ecs_task_role_arn          = module.ecs_api.task_role_arn
+  tags                       = local.common_tags
 }
