@@ -18,6 +18,16 @@ variable "github_repository" {
   }
 }
 
+variable "github_repository_owner_id" {
+  description = "Immutable GitHub organization or user ID included in the customized OIDC subject."
+  type        = string
+}
+
+variable "github_repository_id" {
+  description = "Immutable GitHub repository ID included in the customized OIDC subject."
+  type        = string
+}
+
 variable "github_ref" {
   description = "Full Git ref allowed to assume the role."
   type        = string
